@@ -3,6 +3,7 @@ package pir
 import (
 	"errors"
 	"math"
+	"pir/dpf"
 	"sync"
 
 	he "github.com/sachaservan/hewrap"
@@ -19,20 +20,14 @@ type DBMetadata struct {
 // where each slot has size slotBytes
 type Database struct {
 	DBMetadata
-	Slots [][]*Slot
+	Slots    [][]*Slot
+	Keywords []uint // set of keywords (optional)
 }
 
 // SecretSharedQueryResult contains shares of the resulting slots
 type SecretSharedQueryResult struct {
 	SlotBytes int
 	Shares    []*Slot
-}
-
-// DoublySecretSharedQueryResult contains shares of the resulting slots
-type DoublySecretSharedQueryResult struct {
-	SlotBytes      int
-	EncryptedShare *DoublyEncryptedSlot
-	Pk             *he.PublicKey
 }
 
 // EncryptedSlot is an array of ciphertext bytes
@@ -76,16 +71,45 @@ func NewDatabase() *Database {
 // PrivateSecretSharedQuery uses the provided PIR query to retreive a slot row
 func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*SecretSharedQueryResult, error) {
 
-	if len(query.Bits) != db.Height {
-		return nil, errors.New("query is not formatted correctly")
+	var wg sync.WaitGroup
+
+	numBits := uint(32)
+
+	// init server DPF
+	pf := dpf.ServerInitialize(query.PrfKeys, numBits)
+
+	bits := make([]bool, db.Height)
+	// expand the DPF into the bits array
+	for i := 0; i < db.Height; i++ {
+		// key (index or uint) depending on whether
+		// the query is keyword based or index based
+		// when keyword based use FSS
+		key := uint(i)
+		if query.IsKeywordBased {
+			key = db.Keywords[i]
+		}
+
+		wg.Add(1)
+		go func(i int, key uint) {
+			defer wg.Done()
+
+			if query.IsTwoParty {
+				res := pf.Evaluate2P(query.ShareNumber, query.KeyTwoParty, key)
+				bits[i] = (int(math.Abs(float64(res)))%2 == 1)
+			} else {
+				res := pf.EvaluateMP(query.KeyMultiParty, key)
+				bits[i] = (int(math.Abs(float64(res)))%2 == 1)
+			}
+
+		}(i, key)
 	}
+
+	wg.Wait()
 
 	// mapping of results; one for each process
 	results := make([][]*Slot, nprocs)
 
 	nRowsPerProc := int(float64(db.Height) / float64(nprocs))
-
-	var wg sync.WaitGroup
 
 	for i := 0; i < nprocs; i++ {
 		results[i] = make([]*Slot, db.Width)
@@ -111,7 +135,7 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 
 			for row := start; row < end; row++ {
 				for col := 0; col < db.Width; col++ {
-					if query.Bits[row] {
+					if bits[row] {
 						XorSlots(results[i][col], db.Slots[row][col])
 					}
 				}
@@ -132,52 +156,6 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	}
 
 	return &SecretSharedQueryResult{db.SlotBytes, result}, nil
-}
-
-// PrivateDoublySecretSharedQuery uses the provided PIR query to retreive a slot row
-func (db *Database) PrivateDoublySecretSharedQuery(query *DoubleQueryShare, nprocs int) (*EncryptedQueryResult, error) {
-
-	if len(query.Bits) != db.Height {
-		return nil, errors.New("query bits are not of the correct length")
-	}
-
-	if len(query.EBits) != db.Width {
-		return nil, errors.New("query ebits are not of the correct length ")
-	}
-
-	sharedQuery := &QueryShare{
-		Bits: query.Bits,
-	}
-
-	// do the secret shared PIR query to retrieve a row of shares
-	rowQueryRes, err := db.PrivateSecretSharedQuery(sharedQuery, nprocs)
-	if err != nil {
-		return nil, err
-	}
-
-	// do a column cPIR query to retrieve the share at the column
-	colQuery := &EncryptedQuery{
-		Pk:    query.Pk,
-		EBits: query.EBits,
-	}
-
-	// make a database for the slot shares
-	rowDB := NewDatabase()
-	rowDB.Height = db.Width
-	rowDB.Width = 1
-	rowDB.SlotBytes = rowQueryRes.SlotBytes
-	rowDB.Slots = make([][]*Slot, rowDB.Height)
-	for i := 0; i < rowDB.Height; i++ {
-		rowDB.Slots[i] = make([]*Slot, 1)
-		rowDB.Slots[i][0] = rowQueryRes.Shares[i]
-	}
-
-	result, err := rowDB.PrivateEncryptedQuery(colQuery, nprocs)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 // PrivateEncryptedQuery uses the provided PIR query to retreive a slot row (encrypted)
@@ -412,7 +390,6 @@ func (db *Database) BuildForDataWithSlotSize(data []string, slotSize int) int {
 	}
 
 	return slotSize
-
 }
 
 // BuildForDataWithDimentions constrcuts a PIR database with specified width and height
@@ -446,6 +423,11 @@ func (db *Database) BuildForDataWithDimentions(data []string, width, height int)
 	}
 
 	return slotSize
+}
+
+// SetKeywords set the keywords (uints) associated with each row of the database
+func (db *Database) SetKeywords(keywords []uint) {
+	db.Keywords = keywords
 }
 
 // IndexToCoordinates returns the 2D coodindates for an index
