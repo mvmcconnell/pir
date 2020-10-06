@@ -3,7 +3,6 @@ package pir
 import (
 	"errors"
 	"math"
-	"pir/dpf"
 	"sync"
 
 	he "github.com/sachaservan/hewrap"
@@ -76,7 +75,7 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	numBits := uint(32)
 
 	// init server DPF
-	pf := dpf.ServerInitialize(query.PrfKeys, numBits)
+	pf := ServerInitialize(query.PrfKeys, numBits)
 
 	bits := make([]bool, db.Height)
 	// expand the DPF into the bits array

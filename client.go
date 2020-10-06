@@ -1,4 +1,4 @@
-package dpf
+package pir
 
 // This file contains all the client code for the FSS scheme.
 

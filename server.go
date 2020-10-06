@@ -1,7 +1,6 @@
-package dpf
+package pir
 
 // This file contains the server side code for the FSS library.
-
 import (
 	"crypto/aes"
 	"crypto/cipher"

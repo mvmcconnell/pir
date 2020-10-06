@@ -3,7 +3,6 @@ package pir
 import (
 	"math/big"
 	"math/rand"
-	"pir/dpf"
 
 	he "github.com/sachaservan/hewrap"
 )
@@ -11,9 +10,9 @@ import (
 // QueryShare is a secret share of a query over the database
 // to retrieve a row
 type QueryShare struct {
-	KeyTwoParty    *dpf.Key2P
-	KeyMultiParty  *dpf.KeyMP
-	PrfKeys        []*dpf.PrfKey
+	KeyTwoParty    *Key2P
+	KeyMultiParty  *KeyMP
+	PrfKeys        []*PrfKey
 	IsKeywordBased bool
 	IsTwoParty     bool
 	ShareNumber    uint
@@ -41,10 +40,10 @@ func (dbmd *DBMetadata) NewQueryShares(keyword uint, numShares uint) []*QuerySha
 	// num bits to represent the index
 	numBits := uint(32)
 
-	pf := dpf.ClientInitialize(numBits)
+	pf := ClientInitialize(numBits)
 
-	var dpfKeysTwoParty []*dpf.Key2P
-	var dpfKeysMultiParty []*dpf.KeyMP
+	var dpfKeysTwoParty []*Key2P
+	var dpfKeysMultiParty []*KeyMP
 
 	if numShares == 2 {
 		dpfKeysTwoParty = pf.GenerateTwoServer(keyword, 1)
