@@ -30,7 +30,7 @@ func TestSharedQuery(t *testing.T) {
 	for i := 0; i < NumQueries; i++ {
 		qIndex := uint(rand.Intn(DBHeight))
 
-		shares := db.NewQueryShares(qIndex, 2)
+		shares := db.NewIndexQueryShares(qIndex, 2)
 
 		resA, err := db.PrivateSecretSharedQuery(shares[0], NumProcsForQuery)
 		if err != nil {
@@ -138,7 +138,7 @@ func BenchmarkQuerySecretShares(b *testing.B) {
 	setup()
 
 	db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
-	queryA := db.NewQueryShares(0, 2)[0]
+	queryA := db.NewIndexQueryShares(0, 2)[0]
 
 	b.ResetTimer()
 

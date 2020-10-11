@@ -72,7 +72,13 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 
 	var wg sync.WaitGroup
 
-	numBits := uint(32)
+	// num bits to represent the index
+	numBits := uint(math.Log2(float64(db.Height)) + 1)
+
+	// otherwise assume keyword based (32 bit keys)
+	if query.IsKeywordBased {
+		numBits = uint(32)
+	}
 
 	// init server DPF
 	pf := ServerInitialize(query.PrfKeys, numBits)

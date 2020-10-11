@@ -143,7 +143,7 @@ func TestKeywordQueryBST(t *testing.T) {
 				}
 
 				rowIndex, colIndex := bst.Layers[j].IndexToCoordinates(boundryIndex)
-				shares := bst.Layers[j].NewQueryShares(uint(rowIndex), 2)
+				shares := bst.Layers[j].NewIndexQueryShares(uint(rowIndex), 2)
 
 				resA, err := bst.PrivateQuery(shares[0], j, NumProcsForQuery)
 				if err != nil {
@@ -208,7 +208,7 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 
 			boundryIndex := index1 * int(math.Sqrt(float64(sqst.NumKeys)))
 			rowIndex, _ := sqst.SecondLayer.IndexToCoordinates(boundryIndex)
-			shares := sqst.SecondLayer.NewQueryShares(uint(rowIndex), 2)
+			shares := sqst.SecondLayer.NewIndexQueryShares(uint(rowIndex), 2)
 
 			resA, err := sqst.PrivateQuery(shares[0], NumProcsForQuery)
 			if err != nil {

@@ -1,6 +1,7 @@
 package pir
 
 import (
+	"math"
 	"math/big"
 	"math/rand"
 
@@ -34,11 +35,26 @@ type DoublyEncryptedQuery struct {
 	EBitsCol []*he.Ciphertext
 }
 
+// NewIndexQueryShares generates PIR query shares for the index
+func (dbmd *DBMetadata) NewIndexQueryShares(index uint, numShares uint) []*QueryShare {
+	return dbmd.newQueryShares(index, numShares, true)
+}
+
+// NewKeywordQueryShares generates keyword-based PIR query shares for keyword
+func (dbmd *DBMetadata) NewKeywordQueryShares(keyword uint, numShares uint) []*QueryShare {
+	return dbmd.newQueryShares(keyword, numShares, false)
+}
+
 // NewQueryShares generates random PIR query shares for the index
-func (dbmd *DBMetadata) NewQueryShares(keyword uint, numShares uint) []*QueryShare {
+func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, isIndexQuery bool) []*QueryShare {
 
 	// num bits to represent the index
-	numBits := uint(32)
+	numBits := uint(math.Log2(float64(dbmd.Height)) + 1)
+
+	// otherwise assume keyword based (32 bit keys)
+	if !isIndexQuery {
+		numBits = uint(32)
+	}
 
 	pf := ClientInitialize(numBits)
 
@@ -46,9 +62,9 @@ func (dbmd *DBMetadata) NewQueryShares(keyword uint, numShares uint) []*QuerySha
 	var dpfKeysMultiParty []*KeyMP
 
 	if numShares == 2 {
-		dpfKeysTwoParty = pf.GenerateTwoServer(keyword, 1)
+		dpfKeysTwoParty = pf.GenerateTwoServer(key, 1)
 	} else {
-		dpfKeysMultiParty = pf.GenerateMultiServer(keyword, 1, numShares)
+		dpfKeysMultiParty = pf.GenerateMultiServer(key, 1, numShares)
 	}
 
 	shares := make([]*QueryShare, numShares)
@@ -56,6 +72,7 @@ func (dbmd *DBMetadata) NewQueryShares(keyword uint, numShares uint) []*QuerySha
 		shares[i] = &QueryShare{}
 		shares[i].ShareNumber = uint(i)
 		shares[i].PrfKeys = pf.PrfKeys
+		shares[i].IsKeywordBased = !isIndexQuery
 
 		if numShares == 2 {
 			shares[i].KeyTwoParty = dpfKeysTwoParty[i]
