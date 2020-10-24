@@ -122,7 +122,6 @@ func NewSlotFromBigIntArray(arr []*big.Int, numBytes int, numBytesPerInt int) *S
 	}
 
 	return NewSlot(bytes)
-
 }
 
 // NewSlotFromString converts a string to a slot type

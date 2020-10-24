@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"math/rand"
 
-	he "github.com/sachaservan/hewrap"
+	"github.com/sachaservan/paillier"
 )
 
 // QueryShare is a secret share of a query over the database
@@ -23,16 +23,16 @@ type QueryShare struct {
 // that evaluates to 1 at the desired row in the database
 // bits = (0, 0,.., 1, ...0, 0)
 type EncryptedQuery struct {
-	Pk    *he.PublicKey
-	EBits []*he.Ciphertext
+	Pk    *paillier.PublicKey
+	EBits []*paillier.Ciphertext
 }
 
 // DoublyEncryptedQuery consists of two encrypted point functions
 // that evaluates to 1 at the desired row and column in the database
 type DoublyEncryptedQuery struct {
-	Pk       *he.PublicKey
-	EBitsRow []*he.Ciphertext
-	EBitsCol []*he.Ciphertext
+	Pk       *paillier.PublicKey
+	EBitsRow []*paillier.Ciphertext
+	EBitsCol []*paillier.Ciphertext
 }
 
 // NewIndexQueryShares generates PIR query shares for the index
@@ -67,6 +67,10 @@ func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, isIndexQuery bo
 		dpfKeysMultiParty = pf.GenerateMultiServer(key, 1, numShares)
 	}
 
+	if key >= uint(dbmd.Height) {
+		panic("requesting key outside of domain")
+	}
+
 	shares := make([]*QueryShare, numShares)
 	for i := 0; i < int(numShares); i++ {
 		shares[i] = &QueryShare{}
@@ -87,9 +91,9 @@ func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, isIndexQuery bo
 }
 
 // NewEncryptedQuery generates a new encrypted point function that acts as a PIR query
-func (dbmd *DBMetadata) NewEncryptedQuery(pk *he.PublicKey, index int) *EncryptedQuery {
+func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, index int) *EncryptedQuery {
 
-	res := make([]*he.Ciphertext, dbmd.Height)
+	res := make([]*paillier.Ciphertext, dbmd.Height)
 	for i := 0; i < dbmd.Height; i++ {
 		if i == index {
 			res[i] = pk.EncryptOne()
@@ -106,10 +110,10 @@ func (dbmd *DBMetadata) NewEncryptedQuery(pk *he.PublicKey, index int) *Encrypte
 
 // NewDoublyEncryptedQuery generates two encrypted point function that acts as a PIR query
 // to select the row and column in the database
-func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *he.PublicKey, rowIndex, colIndex int) *DoublyEncryptedQuery {
+func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, rowIndex, colIndex int) *DoublyEncryptedQuery {
 
-	row := make([]*he.Ciphertext, dbmd.Height)
-	col := make([]*he.Ciphertext, dbmd.Width)
+	row := make([]*paillier.Ciphertext, dbmd.Height)
+	col := make([]*paillier.Ciphertext, dbmd.Width)
 	for i := 0; i < dbmd.Height; i++ {
 		if i == rowIndex {
 			row[i] = pk.EncryptOne()
@@ -156,15 +160,15 @@ func Recover(resShares []*SecretSharedQueryResult) []*Slot {
 }
 
 // RecoverEncrypted decryptes the encrypted slot and returns slot
-func RecoverEncrypted(res *EncryptedQueryResult, sk *he.SecretKey) []*Slot {
+func RecoverEncrypted(res *EncryptedQueryResult, sk *paillier.SecretKey) []*Slot {
 
 	slots := make([]*Slot, len(res.Slots))
 
 	// iterate over all the encrypted slots
 	for i, eslot := range res.Slots {
 		arr := make([]*big.Int, len(eslot.Cts))
-		for j, c := range eslot.Cts {
-			arr[j] = sk.Decrypt(res.Pk, c)
+		for j, ct := range eslot.Cts {
+			arr[j] = paillier.ToBigInt(sk.Decrypt(ct))
 		}
 
 		slots[i] = NewSlotFromBigIntArray(arr, res.SlotBytes, res.NumBytesPerCiphertext)
@@ -174,15 +178,15 @@ func RecoverEncrypted(res *EncryptedQueryResult, sk *he.SecretKey) []*Slot {
 }
 
 // RecoverDoublyEncrypted decryptes the encrypted slot and returns slot
-func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *he.SecretKey) *Slot {
+func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *paillier.SecretKey) *Slot {
 
-	ciphertexts := make([]*he.Ciphertext, len(res.Slot.Cts))
+	ciphertexts := make([]*paillier.Ciphertext, len(res.Slot.Cts))
 	for i, cts := range res.Slot.Cts {
 
 		arr := make([]*big.Int, len(cts))
 
 		for j, ct := range cts {
-			arr[j] = sk.Decrypt(res.Pk, ct)
+			arr[j] = paillier.ToBigInt(sk.Decrypt(ct))
 		}
 
 		b, _ := cts[0].Bytes()
@@ -198,7 +202,7 @@ func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *he.SecretKey) *
 
 	arr := make([]*big.Int, len(ciphertexts))
 	for j, c := range ciphertexts {
-		arr[j] = sk.Decrypt(res.Pk, c)
+		arr[j] = paillier.ToBigInt(sk.Decrypt(c))
 	}
 
 	slot := NewSlotFromBigIntArray(arr, res.SlotBytes, res.NumBytesPerCiphertext)

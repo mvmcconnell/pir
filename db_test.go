@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	he "github.com/sachaservan/hewrap"
+	"github.com/sachaservan/paillier"
 )
 
 // test configuration parameters
@@ -14,8 +14,8 @@ const DBWidth = 1 << 10
 
 const SlotBytes = 20
 const SlotBytesStep = 53
-const NumProcsForQuery = 20 // number of parallel processors
-const NumQueries = 5        // number of queries to run
+const NumProcsForQuery = 2 // number of parallel processors
+const NumQueries = 50      // number of queries to run
 
 func setup() {
 	rand.Seed(time.Now().Unix())
@@ -63,7 +63,7 @@ func TestSharedQuery(t *testing.T) {
 func TestEncryptedQuery(t *testing.T) {
 	setup()
 
-	sk, pk := he.KeyGen(512, 1, he.Paillier)
+	sk, pk := paillier.KeyGen(1024)
 
 	for slotBytes := 1; slotBytes < SlotBytes; slotBytes += SlotBytesStep {
 		db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
@@ -96,7 +96,7 @@ func TestEncryptedQuery(t *testing.T) {
 func TestDoublyEncryptedQuery(t *testing.T) {
 	setup()
 
-	sk, pk := he.KeyGen(512, 1, he.Paillier)
+	sk, pk := paillier.KeyGen(1024)
 
 	for slotBytes := 1; slotBytes < SlotBytes; slotBytes += SlotBytesStep {
 		db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
@@ -154,7 +154,7 @@ func BenchmarkQuerySecretShares(b *testing.B) {
 func BenchmarkEncryptedQueryAHE(b *testing.B) {
 	setup()
 
-	_, pk := he.KeyGen(1024, 1, he.Paillier)
+	_, pk := paillier.KeyGen(1024)
 	db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
 	query := db.NewEncryptedQuery(pk, 0)
 

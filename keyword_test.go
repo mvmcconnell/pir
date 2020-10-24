@@ -1,6 +1,7 @@
 package pir
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -145,6 +146,7 @@ func TestKeywordQueryBST(t *testing.T) {
 				rowIndex, colIndex := bst.Layers[j].IndexToCoordinates(boundryIndex)
 				shares := bst.Layers[j].NewIndexQueryShares(uint(rowIndex), 2)
 
+				t.Logf("querying layer %v index  %v\n", j, rowIndex)
 				resA, err := bst.PrivateQuery(shares[0], j, NumProcsForQuery)
 				if err != nil {
 					t.Fail()
@@ -161,6 +163,8 @@ func TestKeywordQueryBST(t *testing.T) {
 
 			if index != i && data[index] != data[i] {
 				t.Fatalf("Incorrect index %v, expected %v; Data at index %v, expected data %v\n", index, i, data[index], data[i])
+			} else {
+				t.Log("passed")
 			}
 		}
 	}
@@ -177,6 +181,8 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 
 		data = PadToSqrt(data)
 		sort.Strings(data)
+
+		fmt.Println(data)
 
 		t.Logf("[Test]: data size %v\n", len(data))
 
