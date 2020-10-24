@@ -13,8 +13,8 @@ const DBHeight = 1 << 5
 const DBWidth = 1 << 5
 
 const SlotBytes = 20
-const SlotBytesStep = 53
-const NumProcsForQuery = 2 // number of parallel processors
+const SlotBytesStep = 5
+const NumProcsForQuery = 4 // number of parallel processors
 const NumQueries = 50      // number of queries to run
 
 func setup() {
@@ -63,7 +63,7 @@ func TestSharedQuery(t *testing.T) {
 func TestEncryptedQuery(t *testing.T) {
 	setup()
 
-	sk, pk := paillier.KeyGen(1024)
+	sk, pk := paillier.KeyGen(512)
 
 	for slotBytes := 1; slotBytes < SlotBytes; slotBytes += SlotBytesStep {
 		db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
@@ -96,7 +96,7 @@ func TestEncryptedQuery(t *testing.T) {
 func TestDoublyEncryptedQuery(t *testing.T) {
 	setup()
 
-	sk, pk := paillier.KeyGen(1024)
+	sk, pk := paillier.KeyGen(512)
 
 	for slotBytes := 1; slotBytes < SlotBytes; slotBytes += SlotBytesStep {
 		db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
@@ -151,7 +151,41 @@ func BenchmarkQuerySecretShares(b *testing.B) {
 	}
 }
 
-func BenchmarkEncryptedQueryAHE(b *testing.B) {
+func BenchmarkQuerySecretSharesSingleThread(b *testing.B) {
+	setup()
+
+	db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
+	queryA := db.NewIndexQueryShares(0, 2)[0]
+
+	b.ResetTimer()
+
+	// benchmark index build time
+	for i := 0; i < b.N; i++ {
+		_, err := db.PrivateSecretSharedQuery(queryA, 1)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func BenchmarkQuerySecretSharesSingle8Thread(b *testing.B) {
+	setup()
+
+	db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
+	queryA := db.NewIndexQueryShares(0, 2)[0]
+
+	b.ResetTimer()
+
+	// benchmark index build time
+	for i := 0; i < b.N; i++ {
+		_, err := db.PrivateSecretSharedQuery(queryA, 8)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func BenchmarkEncryptedQueryAHESingleThread(b *testing.B) {
 	setup()
 
 	_, pk := paillier.KeyGen(1024)
@@ -161,7 +195,25 @@ func BenchmarkEncryptedQueryAHE(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := db.PrivateEncryptedQuery(query, NumProcsForQuery)
+		_, err := db.PrivateEncryptedQuery(query, 1)
+
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func BenchmarkEncryptedQueryAHE8Thread(b *testing.B) {
+	setup()
+
+	_, pk := paillier.KeyGen(1024)
+	db := GenerateRandomDB(DBWidth, DBHeight, SlotBytes)
+	query := db.NewEncryptedQuery(pk, 0)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := db.PrivateEncryptedQuery(query, 8)
 
 		if err != nil {
 			panic(err)

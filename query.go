@@ -124,9 +124,9 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, rowIndex
 
 	for i := 0; i < dbmd.Width; i++ {
 		if i == colIndex {
-			col[i] = pk.EncryptOne()
+			col[i] = pk.EncryptOneAtLevel(paillier.EncLevelTwo)
 		} else {
-			col[i] = pk.EncryptZero()
+			col[i] = pk.EncryptZeroAtLevel(paillier.EncLevelTwo)
 		}
 	}
 
@@ -181,22 +181,11 @@ func RecoverEncrypted(res *EncryptedQueryResult, sk *paillier.SecretKey) []*Slot
 func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *paillier.SecretKey) *Slot {
 
 	ciphertexts := make([]*paillier.Ciphertext, len(res.Slot.Cts))
-	for i, cts := range res.Slot.Cts {
+	for i, ct := range res.Slot.Cts {
 
-		arr := make([]*big.Int, len(cts))
-
-		for j, ct := range cts {
-			arr[j] = paillier.ToBigInt(sk.Decrypt(ct))
-		}
-
-		b, _ := cts[0].Bytes()
-		ctslot := NewSlotFromBigIntArray(arr, len(b), res.NumBytesPerEncryptedCiphertext)
-
-		// recover the ciphertext from the bytes
-		ct, err := res.Pk.NewCiphertextFromBytes(ctslot.Data)
-		if err != nil {
-			panic(err)
-		}
+		// TODO: modify paillier to make this process cleaner
+		ctValue := sk.Decrypt(ct)
+		ct := &paillier.Ciphertext{C: ctValue, Level: paillier.EncLevelOne}
 		ciphertexts[i] = ct
 	}
 

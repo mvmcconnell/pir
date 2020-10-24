@@ -38,7 +38,7 @@ type EncryptedSlot struct {
 // which decrypt to a set of ciphertexts
 // that then decrypt to a slot
 type DoublyEncryptedSlot struct {
-	Cts [][]*paillier.Ciphertext
+	Cts []*paillier.Ciphertext // note: level2 ciphertexts (see Paillier)
 }
 
 // EncryptedQueryResult is an array of encrypted slots
@@ -51,15 +51,10 @@ type EncryptedQueryResult struct {
 
 // DoublyEncryptedQueryResult is an array of encrypted slots
 type DoublyEncryptedQueryResult struct {
-	Slot                           *DoublyEncryptedSlot
-	Pk                             *paillier.PublicKey
-	SlotBytes                      int
-	NumBytesPerCiphertext          int
-	NumBytesPerEncryptedCiphertext int
-
-	// number of ciphertexts needed to encrypt
-	// one ciphertext in the same scheme
-	NumCiphertextsPerPartialCiphertext int
+	Slot                  *DoublyEncryptedSlot
+	Pk                    *paillier.PublicKey
+	SlotBytes             int
+	NumBytesPerCiphertext int
 }
 
 // NewDatabase returns an empty database
@@ -94,10 +89,8 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 			key = db.Keywords[i]
 		}
 
-		wg.Add(1)
-		go func(i int, key uint) {
-			defer wg.Done()
-
+		// don't spin up go routines in the single-thread case
+		if nprocs == 1 {
 			if query.IsTwoParty {
 				res := pf.Evaluate2P(query.ShareNumber, query.KeyTwoParty, key)
 				// IMPORTANT: take mod 2 of uint *before* casting to float64, otherwise there is an overflow edge case!
@@ -108,10 +101,29 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 				bits[i] = (int(math.Abs(float64(res%2))) == 0)
 			}
 
-		}(i, key)
-	}
+		} else {
+			wg.Add(1)
+			go func(i int, key uint) {
+				defer wg.Done()
 
-	wg.Wait()
+				if query.IsTwoParty {
+					res := pf.Evaluate2P(query.ShareNumber, query.KeyTwoParty, key)
+					// IMPORTANT: take mod 2 of uint *before* casting to float64, otherwise there is an overflow edge case!
+					bits[i] = (int(math.Abs(float64(res%2))) == 0)
+				} else {
+					res := pf.EvaluateMP(query.KeyMultiParty, key)
+					// IMPORTANT: take mod 2 of uint *before* casting to float64, otherwise there is an overflow edge case!
+					bits[i] = (int(math.Abs(float64(res%2))) == 0)
+				}
+
+			}(i, key)
+
+			// launch nprocs threads in parallel to evaluate the DPF
+			if i%nprocs == 0 || i+1 == db.Height {
+				wg.Wait()
+			}
+		}
+	}
 
 	// mapping of results; one for each process
 	results := make([][]*Slot, nprocs)
@@ -165,8 +177,8 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	return &SecretSharedQueryResult{db.SlotBytes, result}, nil
 }
 
-func nullCiphertext() *paillier.Ciphertext {
-	return &paillier.Ciphertext{C: paillier.OneBigInt}
+func nullCiphertext(level paillier.EncryptionLevel) *paillier.Ciphertext {
+	return &paillier.Ciphertext{C: paillier.OneBigInt, Level: level}
 }
 
 // PrivateEncryptedQuery uses the provided PIR query to retreive a slot row (encrypted)
@@ -215,7 +227,7 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 				}
 
 				for j := range slotRes[i][col].Cts {
-					slotRes[i][col].Cts[j] = nullCiphertext()
+					slotRes[i][col].Cts[j] = nullCiphertext(paillier.EncLevelOne)
 				}
 			}
 
@@ -279,36 +291,15 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 		return nil, err
 	}
 
-	// number of bytes needed to represent a ciphertext
-	maxEncodedCiphertextBytes := 0
-	for _, s := range rowQueryRes.Slots {
-		for _, c := range s.Cts {
-			b, _ := c.Bytes()
-			l := len(b)
-			if maxEncodedCiphertextBytes < l {
-				maxEncodedCiphertextBytes = l
-			}
-		}
-	}
-
-	msgSpaceBytes := len(query.Pk.N.Bytes()) - 2
-
 	// number of ciphertexts needed to encrypt a slot
 	numCiphertextsPerSlot := len(rowQueryRes.Slots[0].Cts)
 
-	// number of ciphertexts needed to PIR over the encrypted row slots
-	numCiphertextsPerPartialCiphertext := int(math.Ceil(float64(maxEncodedCiphertextBytes) / float64(msgSpaceBytes)))
-	numBytesPerEncryptedCiphertext := 0
-
 	// need to encrypt each of the ciphertexts representing one slot
-	res := make([][]*paillier.Ciphertext, numCiphertextsPerSlot)
+	res := make([]*paillier.Ciphertext, numCiphertextsPerSlot)
 
 	// initialize the slots
 	for col := 0; col < numCiphertextsPerSlot; col++ {
-		res[col] = make([]*paillier.Ciphertext, numCiphertextsPerPartialCiphertext)
-		for j := range res[col] {
-			res[col][j] = nullCiphertext()
-		}
+		res[col] = nullCiphertext(paillier.EncLevelTwo)
 	}
 
 	// apply the PIR column query to get the desired column ciphertext
@@ -324,18 +315,15 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 				Data: ctBytes,
 			}
 
-			intArr, numBytesPerInt, err := ctSlot.ToBigIntArray(numCiphertextsPerPartialCiphertext)
+			// each column ciphertext can encrypted one row ciphertext (see paillier)
+			intArr, _, err := ctSlot.ToBigIntArray(1)
 			if err != nil {
 				panic(err)
 			}
 
-			if numBytesPerEncryptedCiphertext == 0 {
-				numBytesPerEncryptedCiphertext = numBytesPerInt
-			}
-
-			for j, val := range intArr {
+			for _, val := range intArr {
 				sel := query.Pk.ConstMult(bitCt, paillier.ToGmpInt(val))
-				res[i][j] = query.Pk.Add(res[i][j], sel)
+				res[i] = query.Pk.Add(res[i], sel)
 			}
 		}
 	}
@@ -345,12 +333,10 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 	}
 
 	queryResult := &DoublyEncryptedQueryResult{
-		Pk:                                 query.Pk,
-		Slot:                               resSlot,
-		NumBytesPerCiphertext:              rowQueryRes.NumBytesPerCiphertext,
-		NumCiphertextsPerPartialCiphertext: numCiphertextsPerPartialCiphertext,
-		NumBytesPerEncryptedCiphertext:     numBytesPerEncryptedCiphertext,
-		SlotBytes:                          db.SlotBytes,
+		Pk:                    query.Pk,
+		Slot:                  resSlot,
+		NumBytesPerCiphertext: rowQueryRes.NumBytesPerCiphertext,
+		SlotBytes:             db.SlotBytes,
 	}
 
 	return queryResult, nil
