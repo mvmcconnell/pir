@@ -1,7 +1,6 @@
 package pir
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -181,8 +180,6 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 
 		data = PadToSqrt(data)
 		sort.Strings(data)
-
-		fmt.Println(data)
 
 		t.Logf("[Test]: data size %v\n", len(data))
 

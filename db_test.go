@@ -9,8 +9,8 @@ import (
 )
 
 // test configuration parameters
-const DBHeight = 1 << 10
-const DBWidth = 1 << 10
+const DBHeight = 1 << 5
+const DBWidth = 1 << 5
 
 const SlotBytes = 20
 const SlotBytesStep = 53
