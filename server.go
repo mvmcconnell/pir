@@ -106,14 +106,13 @@ func (f *Dpf) Evaluate2P(serverNum uint, k *Key2P, x uint) int {
 // the client has to add it locally.
 
 func (f *Dpf) EvaluateMP(k *KeyMP, x uint) uint32 {
-	fOut := make([]byte, aes.BlockSize*initPRFLen)
-	fTemp := make([]byte, aes.BlockSize)
 
 	p2 := uint(math.Pow(2, float64(k.NumParties-1)))
 	mu := uint(math.Ceil(math.Pow(2, float64(f.NumBits)/2) * math.Pow(2, float64(k.NumParties-1)/2)))
+	numBits := f.NumBits
 
-	delta := x & ((1 << (f.NumBits / 2)) - 1)
-	gamma := (x & (((1 << (f.NumBits + 1) / 2) - 1) << f.NumBits / 2)) >> f.NumBits / 2
+	delta := x & ((1 << (numBits / 2)) - 1)
+	gamma := (x & (((1 << (numBits + 1) / 2) - 1) << numBits / 2)) >> numBits / 2
 	mBytes := f.M * mu
 
 	y := make([]uint32, mu)
@@ -126,11 +125,12 @@ func (f *Dpf) EvaluateMP(k *KeyMP, x uint) uint32 {
 				break
 			}
 		}
-		if all_zero_bytes == false {
+
+		if !all_zero_bytes {
 			numBlocks := uint(math.Ceil(float64(mBytes) / float64(aes.BlockSize)))
-			prf(s, f.FixedBlocks, numBlocks, fTemp, fOut)
+			prf(s, f.FixedBlocks, numBlocks, f.Temp, f.Out)
 			for k := uint(0); k < mu; k++ {
-				tempInt := binary.LittleEndian.Uint32(fOut[f.M*k : f.M*k+f.M])
+				tempInt := binary.LittleEndian.Uint32(f.Out[f.M*k : f.M*k+f.M])
 				y[k] = y[k] ^ tempInt
 			}
 			for j := uint(0); j < mu; j++ {

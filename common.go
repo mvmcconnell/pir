@@ -36,7 +36,7 @@ type Key2P struct {
 // KeyMP is a multi-party DPF key
 type KeyMP struct {
 	NumParties uint
-	CW         [][]uint32 //Assume CW is 32-bit because f.M is 4. If you change f.M, you should change this
+	CW         [][]uint32 // Assume CW is 32-bit because f.M is 4. If you change f.M, you should change this
 	Sigma      [][]byte
 }
 
