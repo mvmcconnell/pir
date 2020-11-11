@@ -8,18 +8,6 @@ import (
 // padding value to encode when formatting the database for PIR
 const padding = "x"
 
-// PrivateBST is a binary search index structure
-// to find an index of a keyword using recursive PIR
-// to query each layer of the tree.
-// Requires log(n) PIR queries to go through the layers
-// Each layer is a PIR database
-type PrivateBST struct {
-	Root      *Slot
-	Layers    []*Database // each layer is a list of  2^i (i > 0) values representing the ith layer of the tree
-	NumKeys   int
-	SlotBytes int
-}
-
 // PrivateSqrtST is a search tree structure with sqrt nodes per layer.
 // Requires 1 PIR query to get the index
 // First round: get FirstLayer (sqrt N boundries)
@@ -35,52 +23,9 @@ type PrivateSqrtST struct {
 	Height      int
 }
 
-// NewPrivateBST returns an empty PrivateBST struct
-func NewPrivateBST() *PrivateBST {
-	return &PrivateBST{}
-}
-
 // NewPrivateSqrtST returns an empty PrivateBST struct
 func NewPrivateSqrtST() *PrivateSqrtST {
 	return &PrivateSqrtST{}
-}
-
-// BuildForData first generates a BST for the data
-// and then converts each layer into a PIR database
-// with optimal width/height
-func (bst *PrivateBST) BuildForData(data []string) error {
-
-	// check if the data size is a power of 2
-	// this is a requirement for constructing the BST
-	if math.Log2(float64(len(data))) != math.Floor(math.Log2(float64(len(data)))) {
-		data = PadToPowerOf2(data)
-	}
-
-	bst.NumKeys = len(data)
-
-	// get depth of tree
-	depth := int(math.Ceil(math.Log2(float64(len(data)))))
-
-	// recursively build the BST
-	layers, _ := buildBST(data, depth)
-
-	// build PIR databases over each layer of the BST
-	bst.Layers = make([]*Database, depth)
-
-	slotBytes := GetRequiredSlotSize(data)
-
-	for i := 0; i < depth; i++ {
-
-		bst.Layers[i] = NewDatabase()
-
-		// layer index is offset by 1 given we do not include root
-		bst.Layers[i].BuildForDataWithSlotSize(layers[i], slotBytes)
-	}
-
-	bst.Root = NewSlotFromString(layers[0][0], slotBytes)
-	bst.SlotBytes = slotBytes
-
-	return nil
 }
 
 // BuildForData first generates a PrivateSqrtST for the data
@@ -118,24 +63,6 @@ func (sqst *PrivateSqrtST) BuildForData(data []string) error {
 }
 
 // PrivateQuery queries the specified layer of the BST using PIR
-func (bst *PrivateBST) PrivateQuery(
-	query *QueryShare,
-	layer int,
-	nprocs int) (*SecretSharedQueryResult, error) {
-
-	return bst.Layers[layer].PrivateSecretSharedQuery(query, nprocs)
-}
-
-// PrivateEncryptedQuery queries the specified layer of the BST using cPIR
-func (bst *PrivateBST) PrivateEncryptedQuery(
-	query *EncryptedQuery,
-	layer int,
-	nprocs int) (*EncryptedQueryResult, error) {
-
-	return bst.Layers[layer].PrivateEncryptedQuery(query, nprocs)
-}
-
-// PrivateQuery queries the specified layer of the BST using PIR
 func (sqst *PrivateSqrtST) PrivateQuery(
 	query *QueryShare,
 	nprocs int) (*SecretSharedQueryResult, error) {
@@ -157,20 +84,6 @@ func (sqst *PrivateSqrtST) GetSecondLayerMetadata() *DBMetadata {
 		sqst.SecondLayer.SlotBytes,
 		sqst.SecondLayer.DBSize,
 	}
-}
-
-// GetLayerMetadata returns the metadata for each PIR database of each layer
-func (bst *PrivateBST) GetLayerMetadata() []*DBMetadata {
-	layerMetadata := make([]*DBMetadata, len(bst.Layers))
-
-	for i, db := range bst.Layers {
-		layerMetadata[i] = &DBMetadata{
-			db.SlotBytes,
-			db.DBSize,
-		}
-	}
-
-	return layerMetadata
 }
 
 // PadToPowerOf2 pads the data to a power of 2
