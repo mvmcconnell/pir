@@ -9,11 +9,12 @@ import (
 
 const initPRFLen uint = 4
 
+// PrfKey contains the prg seed bytes
 type PrfKey struct {
 	Bytes []byte
 }
 
-// DPF is the DPF key
+// Dpf is a distributed point function key handed to a party
 type Dpf struct {
 	// store keys used in fixedBlocks so that they can be sent to the server
 	PrfKeys     []*PrfKey

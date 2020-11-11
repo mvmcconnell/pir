@@ -7,26 +7,23 @@ import (
 
 // GenerateRandomDB generates a database of slots (where each slot is of size NumBytes)
 // the width and height parameter specify the number of rows and columns in the database
-func GenerateRandomDB(width, height, numBytes int) *Database {
+func GenerateRandomDB(size, numBytes int) *Database {
+
 	db := Database{}
-	db.Slots = make([][]*Slot, height)
-	db.Width = width
-	db.Height = height
+	db.Slots = make([]*Slot, size)
 	db.SlotBytes = numBytes
+	db.DBSize = size
 
-	for row := 0; row < height; row++ {
-		db.Slots[row] = make([]*Slot, width)
-		for col := 0; col < width; col++ {
-			slotData := make([]byte, numBytes)
-			_, err := rand.Read(slotData)
-			if err != nil {
-				panic(fmt.Sprintf("Generating random bytes failed with %v\n", err))
-			}
+	for i := 0; i < size; i++ {
+		slotData := make([]byte, numBytes)
+		_, err := rand.Read(slotData)
+		if err != nil {
+			panic(fmt.Sprintf("Generating random bytes failed with %v\n", err))
+		}
 
-			// make a new slot with slotData
-			db.Slots[row][col] = &Slot{
-				Data: slotData,
-			}
+		// make a new slot with slotData
+		db.Slots[i] = &Slot{
+			Data: slotData,
 		}
 	}
 

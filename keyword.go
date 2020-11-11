@@ -31,6 +31,8 @@ type PrivateSqrtST struct {
 	SecondLayer *Database
 	NumKeys     int
 	SlotBytes   int
+	Width       int
+	Height      int
 }
 
 // NewPrivateBST returns an empty PrivateBST struct
@@ -102,12 +104,15 @@ func (sqst *PrivateSqrtST) BuildForData(data []string) error {
 	slotBytes := GetRequiredSlotSize(firstLayeBoundries)
 
 	db := NewDatabase()
-	db.BuildForDataWithDimentions(data, sqrtDim, sqrtDim)
+	slotSize := GetRequiredSlotSize(data)
+	db.BuildForDataWithSlotSize(data, slotSize)
 
 	sqst.FirstLayer = firstLayeBoundries
 	sqst.SecondLayer = db
 	sqst.SlotBytes = slotBytes
 	sqst.NumKeys = len(data)
+	sqst.Width = sqrtDim
+	sqst.Height = sqrtDim
 
 	return nil
 }
@@ -150,8 +155,7 @@ func (sqst *PrivateSqrtST) PrivateEncryptedQuery(
 func (sqst *PrivateSqrtST) GetSecondLayerMetadata() *DBMetadata {
 	return &DBMetadata{
 		sqst.SecondLayer.SlotBytes,
-		sqst.SecondLayer.Width,
-		sqst.SecondLayer.Height,
+		sqst.SecondLayer.DBSize,
 	}
 }
 
@@ -162,8 +166,7 @@ func (bst *PrivateBST) GetLayerMetadata() []*DBMetadata {
 	for i, db := range bst.Layers {
 		layerMetadata[i] = &DBMetadata{
 			db.SlotBytes,
-			db.Width,
-			db.Height,
+			db.DBSize,
 		}
 	}
 

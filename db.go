@@ -1,7 +1,6 @@
 package pir
 
 import (
-	"errors"
 	"math"
 	"sync"
 
@@ -11,15 +10,15 @@ import (
 // DBMetadata contains information on the layout
 // and size information for a slot database type
 type DBMetadata struct {
-	SlotBytes     int
-	Width, Height int
+	SlotBytes int
+	DBSize    int
 }
 
 // Database is a set of slots arranged in a grid of size width x height
 // where each slot has size slotBytes
 type Database struct {
 	DBMetadata
-	Slots    [][]*Slot
+	Slots    []*Slot
 	Keywords []uint // set of keywords (optional)
 }
 
@@ -65,10 +64,13 @@ func NewDatabase() *Database {
 // PrivateSecretSharedQuery uses the provided PIR query to retreive a slot row
 func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*SecretSharedQueryResult, error) {
 
+	// width of databse given query.height
+	dimWidth := int(math.Ceil(float64(len(db.Slots) / query.DimHeight)))
+
 	var wg sync.WaitGroup
 
 	// num bits to represent the index
-	numBits := uint(math.Log2(float64(db.Height)) + 1)
+	numBits := uint(math.Log2(float64(dimWidth)) + 1)
 
 	// otherwise assume keyword based (32 bit keys)
 	if query.IsKeywordBased {
@@ -78,9 +80,9 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	// init server DPF
 	pf := ServerInitialize(query.PrfKeys, numBits)
 
-	bits := make([]bool, db.Height)
+	bits := make([]bool, dimWidth)
 	// expand the DPF into the bits array
-	for i := 0; i < db.Height; i++ {
+	for i := 0; i < dimWidth; i++ {
 		// key (index or uint) depending on whether
 		// the query is keyword based or index based
 		// when keyword based use FSS
@@ -119,7 +121,7 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 			}(i, key)
 
 			// launch nprocs threads in parallel to evaluate the DPF
-			if i%nprocs == 0 || i+1 == db.Height {
+			if i%nprocs == 0 || i+1 == dimWidth {
 				wg.Wait()
 			}
 		}
@@ -128,10 +130,10 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	// mapping of results; one for each process
 	results := make([][]*Slot, nprocs)
 
-	nRowsPerProc := int(float64(db.Height) / float64(nprocs))
+	nRowsPerProc := int(float64(dimWidth) / float64(nprocs))
 
 	for i := 0; i < nprocs; i++ {
-		results[i] = make([]*Slot, db.Width)
+		results[i] = make([]*Slot, dimWidth)
 
 		wg.Add(1)
 		go func(i int) {
@@ -142,20 +144,23 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 
 			// handle the edge case
 			if i+1 == nprocs {
-				end = db.Height
+				end = dimWidth
 			}
 
 			// initialize the slots
-			for col := 0; col < db.Width; col++ {
+			for col := 0; col < dimWidth; col++ {
 				results[i][col] = &Slot{
 					Data: make([]byte, db.SlotBytes),
 				}
 			}
 
 			for row := start; row < end; row++ {
-				for col := 0; col < db.Width; col++ {
-					if bits[row] {
-						XorSlots(results[i][col], db.Slots[row][col])
+				for col := 0; col < dimWidth; col++ {
+
+					slotIndex := row*dimWidth + col
+					// xor if bit is set and within bounds
+					if bits[row] && slotIndex < len(db.Slots) {
+						XorSlots(results[i][col], db.Slots[slotIndex])
 					}
 				}
 			}
@@ -169,7 +174,7 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	copy(result, results[0])
 
 	for i := 1; i < nprocs; i++ {
-		for j := 0; j < db.Width; j++ {
+		for j := 0; j < dimWidth; j++ {
 			XorSlots(result[j], results[i][j])
 		}
 	}
@@ -187,9 +192,8 @@ func nullCiphertext(level paillier.EncryptionLevel) *paillier.Ciphertext {
 // all the bytes in a slot, thus requiring the bytes to be split up into several ciphertexts
 func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*EncryptedQueryResult, error) {
 
-	if len(query.EBits) != db.Height {
-		return nil, errors.New("query is not formatted correctly (height != number of row bits)")
-	}
+	// width of databse given query.height
+	dimWidth, dimHeight := db.GetDimentionsForDatabase(len(query.EBits))
 
 	// how many ciphertexts are needed to represent a slot
 	msgSpaceBytes := float64(len(query.Pk.N.Bytes()) - 2)
@@ -201,12 +205,12 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 	slotRes := make([][]*EncryptedSlot, nprocs)
 
 	// how many rows each process gets
-	numRowsPerProc := int(float64(db.Height) / float64(nprocs))
+	numRowsPerProc := int(float64(dimHeight) / float64(nprocs))
 
 	var wg sync.WaitGroup
 
 	for i := 0; i < nprocs; i++ {
-		slotRes[i] = make([]*EncryptedSlot, db.Width)
+		slotRes[i] = make([]*EncryptedSlot, dimWidth)
 
 		wg.Add(1)
 		go func(i int) {
@@ -217,11 +221,11 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 
 			// handle the edge case
 			if i+1 == nprocs {
-				end = db.Height
+				end = dimHeight
 			}
 
 			// initialize the slots
-			for col := 0; col < db.Width; col++ {
+			for col := 0; col < dimWidth; col++ {
 				slotRes[i][col] = &EncryptedSlot{
 					Cts: make([]*paillier.Ciphertext, numCiphertextsPerSlot),
 				}
@@ -232,9 +236,14 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 			}
 
 			for row := start; row < end; row++ {
-				for col := 0; col < db.Width; col++ {
+				for col := 0; col < dimWidth; col++ {
+					slotIndex := row*dimWidth + col
+					if slotIndex >= len(db.Slots) {
+						continue
+					}
+
 					// convert the slot into big.Int array
-					intArr, numBytesPerInt, err := db.Slots[row][col].ToBigIntArray(numCiphertextsPerSlot)
+					intArr, numBytesPerInt, err := db.Slots[slotIndex].ToBigIntArray(numCiphertextsPerSlot)
 					if err != nil {
 						panic(err)
 					}
@@ -258,7 +267,7 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 
 	slots := slotRes[0]
 	for i := 1; i < nprocs; i++ {
-		for j := 0; j < db.Width; j++ {
+		for j := 0; j < dimWidth; j++ {
 			addEncryptedSlots(query.Pk, slots[j], slotRes[i][j])
 		}
 	}
@@ -277,9 +286,8 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 // applying PrivateEncryptedQuery
 func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, nprocs int) (*DoublyEncryptedQueryResult, error) {
 
-	if len(query.EBitsCol) != db.Width {
-		return nil, errors.New("query is not formatted correctly (width != number of column bits)")
-	}
+	// width of databse given query.height
+	dimWidth := int(math.Ceil(float64(len(db.Slots) / len(query.EBitsRow))))
 
 	// execute the row PIR query to get the encrypted row containing the result
 	rowQuery := &EncryptedQuery{
@@ -303,7 +311,7 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 	}
 
 	// apply the PIR column query to get the desired column ciphertext
-	for col := 0; col < db.Width; col++ {
+	for col := 0; col < dimWidth; col++ {
 
 		// "selection" bit
 		bitCt := query.EBitsCol[col]
@@ -347,79 +355,30 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 // of slots where each string gets a slot
 // and automatically finds the bandwidth-optimal
 // width and height for PIR
-func (db *Database) BuildForData(data []string) int {
+func (db *Database) BuildForData(data []string) {
 
 	slotSize := GetRequiredSlotSize(data)
-	return db.BuildForDataWithSlotSize(data, slotSize)
+	db.BuildForDataWithSlotSize(data, slotSize)
 }
 
 // BuildForDataWithSlotSize constrcuts a PIR database
 // of slots where each string gets a slot of the specified size
-func (db *Database) BuildForDataWithSlotSize(data []string, slotSize int) int {
+func (db *Database) BuildForDataWithSlotSize(data []string, slotSize int) {
 
-	dbSize := len(data)
-
-	width, height := GetOptimalDBDimentions(slotSize, dbSize)
-
-	db.Slots = make([][]*Slot, height)
-	db.Width = width
-	db.Height = height
+	db.Slots = make([]*Slot, len(data))
 	db.SlotBytes = slotSize
 
-	for row := 0; row < height; row++ {
-		db.Slots[row] = make([]*Slot, width)
-		for col := 0; col < width; col++ {
-			slotData := make([]byte, slotSize)
+	for i := 0; i < len(data); i++ {
+		slotData := make([]byte, slotSize)
 
-			// when computing optimal dimentions,
-			// there might be some extra slots created
-			// so need to make sure its not out of bounds
-			if len(data) > row*width+col {
-				stringData := []byte(data[row*width+col])
-				copy(slotData[:], stringData)
-			}
+		stringData := []byte(data[i])
+		copy(slotData[:], stringData)
 
-			// make a new slot with slotData
-			db.Slots[row][col] = &Slot{
-				Data: slotData,
-			}
+		// make a new slot with slotData
+		db.Slots[i] = &Slot{
+			Data: slotData,
 		}
 	}
-
-	return slotSize
-}
-
-// BuildForDataWithDimentions constrcuts a PIR database with specified width and height
-func (db *Database) BuildForDataWithDimentions(data []string, width, height int) int {
-
-	slotSize := GetRequiredSlotSize(data)
-
-	db.Slots = make([][]*Slot, height)
-	db.Width = width
-	db.Height = height
-	db.SlotBytes = slotSize
-
-	for row := 0; row < height; row++ {
-		db.Slots[row] = make([]*Slot, width)
-		for col := 0; col < width; col++ {
-			slotData := make([]byte, slotSize)
-
-			// when computing optimal dimentions,
-			// there might be some extra slots created
-			// so need to make sure its not out of bounds
-			if len(data) > row*width+col {
-				stringData := []byte(data[row*width+col])
-				copy(slotData[:], stringData)
-			}
-
-			// make a new slot with slotData
-			db.Slots[row][col] = &Slot{
-				Data: slotData,
-			}
-		}
-	}
-
-	return slotSize
 }
 
 // SetKeywords set the keywords (uints) associated with each row of the database
@@ -430,8 +389,21 @@ func (db *Database) SetKeywords(keywords []uint) {
 // IndexToCoordinates returns the 2D coodindates for an index
 // a PIR query should use the first value to recover the row
 // and the second value to recover the column in the response
-func (dbmd *DBMetadata) IndexToCoordinates(index int) (int, int) {
-	return int(index / dbmd.Width), int(index % dbmd.Width)
+func (dbmd *DBMetadata) IndexToCoordinates(index, width, height int) (int, int) {
+	return int(index / width), int(index % width)
+}
+
+// GetDimentionsForDatabase returns the width and height given a height constraint
+func (dbmd *DBMetadata) GetDimentionsForDatabase(height int) (int, int) {
+	dimWidth := int(math.Ceil(float64(dbmd.DBSize / height)))
+	dimHeight := height
+
+	return dimWidth, dimHeight
+}
+
+// GetSqrtOfDBSize returns sqrt(DBSize) + 1
+func (dbmd *DBMetadata) GetSqrtOfDBSize() int {
+	return int(math.Sqrt(float64(dbmd.DBSize)) + 1)
 }
 
 // GetOptimalDBDimentions returns the optimal DB dimentions for PIR

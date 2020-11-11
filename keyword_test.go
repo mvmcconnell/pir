@@ -79,95 +79,95 @@ func TestBuildBST(t *testing.T) {
 	}
 }
 
-func TestKeywordQueryBST(t *testing.T) {
-	setup()
+// func TestKeywordQueryBST(t *testing.T) {
+// 	setup()
 
-	for trial := 0; trial < NumTrials; trial++ {
+// 	for trial := 0; trial < NumTrials; trial++ {
 
-		numStrings := rand.Intn(1<<10) + 100
-		data := generateStringsInSequence(numStrings)
-		paddingSize := len(PadToPowerOf2(data)) - len(data)
+// 		numStrings := rand.Intn(1<<10) + 100
+// 		data := generateStringsInSequence(numStrings)
+// 		paddingSize := len(PadToPowerOf2(data)) - len(data)
 
-		data = PadToPowerOf2(data)
-		sort.Strings(data)
+// 		data = PadToPowerOf2(data)
+// 		sort.Strings(data)
 
-		bst := NewPrivateBST()
-		bst.BuildForData(data)
+// 		bst := NewPrivateBST()
+// 		bst.BuildForData(data)
 
-		t.Logf("[Test]: padding size is %v.\n", paddingSize)
+// 		t.Logf("[Test]: padding size is %v.\n", paddingSize)
 
-		var res []*Slot
+// 		var res []*Slot
 
-		for i := 0; i < len(data); i++ {
+// 		for i := 0; i < len(data); i++ {
 
-			query := NewSlotFromString(data[i], bst.SlotBytes)
+// 			query := NewSlotFromString(data[i], bst.SlotBytes)
 
-			depth := len(bst.Layers)
-			boundry := bst.Root
+// 			depth := len(bst.Layers)
+// 			boundry := bst.Root
 
-			// index of the value
-			index := len(data) / 2
+// 			// index of the value
+// 			index := len(data) / 2
 
-			// next index increment (left or right)
-			step := len(data) / 4
+// 			// next index increment (left or right)
+// 			step := len(data) / 4
 
-			// index of the next boundry in the tree
-			boundryIndex := 0
+// 			// index of the next boundry in the tree
+// 			boundryIndex := 0
 
-			for j := 1; j <= depth; j++ {
+// 			for j := 1; j <= depth; j++ {
 
-				// index of the current boundry (+1) in the next layer
-				// i.e., this is the upper value to compare to
-				boundryIndex = (index / step) / 2
+// 				// index of the current boundry (+1) in the next layer
+// 				// i.e., this is the upper value to compare to
+// 				boundryIndex = (index / step) / 2
 
-				cmp := query.Compare(boundry)
-				if cmp > 0 {
-					t.Logf("[Test]: query %v, index %v,  boundry index %v, boundry %v, going right.\n", query, index, boundryIndex, boundry)
-					index += step
-				} else if cmp < 0 {
-					t.Logf("[Test]: query %v, index %v, boundry index %v, boundry %v, going left.\n", query, index, boundryIndex, boundry)
-					boundryIndex--
-					index -= step
-				} else {
-					break //  query == boundry
-				}
+// 				cmp := query.Compare(boundry)
+// 				if cmp > 0 {
+// 					t.Logf("[Test]: query %v, index %v,  boundry index %v, boundry %v, going right.\n", query, index, boundryIndex, boundry)
+// 					index += step
+// 				} else if cmp < 0 {
+// 					t.Logf("[Test]: query %v, index %v, boundry index %v, boundry %v, going left.\n", query, index, boundryIndex, boundry)
+// 					boundryIndex--
+// 					index -= step
+// 				} else {
+// 					break //  query == boundry
+// 				}
 
-				// no more boundries to fetch
-				if j == depth {
-					break
-				}
+// 				// no more boundries to fetch
+// 				if j == depth {
+// 					break
+// 				}
 
-				step /= 2
-				if step == 0 {
-					step = 1
-				}
+// 				step /= 2
+// 				if step == 0 {
+// 					step = 1
+// 				}
 
-				rowIndex, colIndex := bst.Layers[j].IndexToCoordinates(boundryIndex)
-				shares := bst.Layers[j].NewIndexQueryShares(uint(rowIndex), 2)
+// 				rowIndex, colIndex := bst.Layers[j].IndexToCoordinates(boundryIndex, dimWidth, dimHeight)
+// 				shares := bst.Layers[j].NewIndexQueryShares(uint(rowIndex), 2)
 
-				t.Logf("querying layer %v index  %v\n", j, rowIndex)
-				resA, err := bst.PrivateQuery(shares[0], j, NumProcsForQuery)
-				if err != nil {
-					t.Fail()
-				}
-				resB, err := bst.PrivateQuery(shares[1], j, NumProcsForQuery)
-				if err != nil {
-					t.Fail()
-				}
+// 				t.Logf("querying layer %v index  %v\n", j, rowIndex)
+// 				resA, err := bst.PrivateQuery(shares[0], j, NumProcsForQuery)
+// 				if err != nil {
+// 					t.Fail()
+// 				}
+// 				resB, err := bst.PrivateQuery(shares[1], j, NumProcsForQuery)
+// 				if err != nil {
+// 					t.Fail()
+// 				}
 
-				resultShares := [...]*SecretSharedQueryResult{resA, resB}
-				res = Recover(resultShares[:])
-				boundry = res[colIndex]
-			}
+// 				resultShares := [...]*SecretSharedQueryResult{resA, resB}
+// 				res = Recover(resultShares[:])
+// 				boundry = res[colIndex]
+// 			}
 
-			if index != i && data[index] != data[i] {
-				t.Fatalf("Incorrect index %v, expected %v; Data at index %v, expected data %v\n", index, i, data[index], data[i])
-			} else {
-				t.Log("passed")
-			}
-		}
-	}
-}
+// 			if index != i && data[index] != data[i] {
+// 				t.Fatalf("Incorrect index %v, expected %v; Data at index %v, expected data %v\n", index, i, data[index], data[i])
+// 			} else {
+// 				t.Log("passed")
+// 			}
+// 		}
+// 	}
+// }
 
 func TestKeywordQuerySqrtST(t *testing.T) {
 	setup()
@@ -176,7 +176,6 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 
 		numStrings := rand.Intn(1<<10) + 100
 		data := generateStringsInSequence(numStrings)
-		paddingSize := len(PadToPowerOf2(data)) - len(data)
 
 		data = PadToSqrt(data)
 		sort.Strings(data)
@@ -186,11 +185,9 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 		sqst := NewPrivateSqrtST()
 		sqst.BuildForData(data)
 
-		t.Logf("[Test]: padding size is %v.\n", paddingSize)
-
 		var res []*Slot
 
-		for i := 4; i < len(data); i++ {
+		for i := 0; i < len(data); i++ {
 
 			query := NewSlotFromString(data[i], sqst.SlotBytes)
 
@@ -202,16 +199,14 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 			}
 
 			boundry := ""
-			index1 := 0
-			for index1, boundry = range sqst.FirstLayer {
+			rowIndex := 0
+			for rowIndex, boundry = range sqst.FirstLayer {
 				if data[i] < boundry {
 					break
 				}
 			}
 
-			boundryIndex := index1 * int(math.Sqrt(float64(sqst.NumKeys)))
-			rowIndex, _ := sqst.SecondLayer.IndexToCoordinates(boundryIndex)
-			shares := sqst.SecondLayer.NewIndexQueryShares(uint(rowIndex), 2)
+			shares := sqst.SecondLayer.NewIndexQueryShares(uint(rowIndex), sqst.Height, 2)
 
 			resA, err := sqst.PrivateQuery(shares[0], NumProcsForQuery)
 			if err != nil {
@@ -232,15 +227,15 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 				)
 			}
 
-			index2 := 0
+			colIndex := 0
 			var slot *Slot
-			for index2, slot = range res {
+			for colIndex, slot = range res {
 				if slot.Compare(query) >= 0 {
 					break
 				}
 			}
 
-			index := len(sqst.FirstLayer)*index1 + index2
+			index := rowIndex*sqst.Width + colIndex
 
 			if index != i && data[index] != data[i] {
 				t.Fatalf("Incorrect index %v, expected %v; Data at index %v, expected data %v\n", index, i, data[index], data[i])

@@ -17,6 +17,7 @@ type QueryShare struct {
 	IsKeywordBased bool
 	IsTwoParty     bool
 	ShareNumber    uint
+	DimHeight      int // height of the database
 }
 
 // EncryptedQuery is an encryption of a point function
@@ -30,26 +31,27 @@ type EncryptedQuery struct {
 // DoublyEncryptedQuery consists of two encrypted point functions
 // that evaluates to 1 at the desired row and column in the database
 type DoublyEncryptedQuery struct {
-	Pk       *paillier.PublicKey
-	EBitsRow []*paillier.Ciphertext
-	EBitsCol []*paillier.Ciphertext
+	Pk        *paillier.PublicKey
+	EBitsRow  []*paillier.Ciphertext
+	EBitsCol  []*paillier.Ciphertext
+	GroupSize int // how many elements to return
 }
 
 // NewIndexQueryShares generates PIR query shares for the index
-func (dbmd *DBMetadata) NewIndexQueryShares(index uint, numShares uint) []*QueryShare {
-	return dbmd.newQueryShares(index, numShares, true)
+func (dbmd *DBMetadata) NewIndexQueryShares(index uint, height int, numShares uint) []*QueryShare {
+	return dbmd.newQueryShares(index, numShares, height, true)
 }
 
 // NewKeywordQueryShares generates keyword-based PIR query shares for keyword
-func (dbmd *DBMetadata) NewKeywordQueryShares(keyword uint, numShares uint) []*QueryShare {
-	return dbmd.newQueryShares(keyword, numShares, false)
+func (dbmd *DBMetadata) NewKeywordQueryShares(keyword uint, height int, numShares uint) []*QueryShare {
+	return dbmd.newQueryShares(keyword, numShares, height, false)
 }
 
 // NewQueryShares generates random PIR query shares for the index
-func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, isIndexQuery bool) []*QueryShare {
+func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, dimHeight int, isIndexQuery bool) []*QueryShare {
 
 	// num bits to represent the index
-	numBits := uint(math.Log2(float64(dbmd.Height)) + 1)
+	numBits := uint(math.Log2(float64(dimHeight)) + 1)
 
 	// otherwise assume keyword based (32 bit keys)
 	if !isIndexQuery {
@@ -67,7 +69,7 @@ func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, isIndexQuery bo
 		dpfKeysMultiParty = pf.GenerateMultiServer(key, 1, numShares)
 	}
 
-	if key >= uint(dbmd.Height) {
+	if key >= uint(dimHeight) {
 		panic("requesting key outside of domain")
 	}
 
@@ -77,6 +79,7 @@ func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, isIndexQuery bo
 		shares[i].ShareNumber = uint(i)
 		shares[i].PrfKeys = pf.PrfKeys
 		shares[i].IsKeywordBased = !isIndexQuery
+		shares[i].DimHeight = dimHeight
 
 		if numShares == 2 {
 			shares[i].KeyTwoParty = dpfKeysTwoParty[i]
@@ -91,10 +94,10 @@ func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, isIndexQuery bo
 }
 
 // NewEncryptedQuery generates a new encrypted point function that acts as a PIR query
-func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, index int) *EncryptedQuery {
+func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, height int, index int) *EncryptedQuery {
 
-	res := make([]*paillier.Ciphertext, dbmd.Height)
-	for i := 0; i < dbmd.Height; i++ {
+	res := make([]*paillier.Ciphertext, height)
+	for i := 0; i < height; i++ {
 		if i == index {
 			res[i] = pk.EncryptOne()
 		} else {
@@ -110,11 +113,14 @@ func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, index int) *En
 
 // NewDoublyEncryptedQuery generates two encrypted point function that acts as a PIR query
 // to select the row and column in the database
-func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, rowIndex, colIndex int) *DoublyEncryptedQuery {
+func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, height int, rowIndex, colIndex int) *DoublyEncryptedQuery {
 
-	row := make([]*paillier.Ciphertext, dbmd.Height)
-	col := make([]*paillier.Ciphertext, dbmd.Width)
-	for i := 0; i < dbmd.Height; i++ {
+	// width of databse given query.height
+	dimWidth, dimHeight := dbmd.GetDimentionsForDatabase(height)
+
+	row := make([]*paillier.Ciphertext, dimHeight)
+	col := make([]*paillier.Ciphertext, dimWidth)
+	for i := 0; i < dimHeight; i++ {
 		if i == rowIndex {
 			row[i] = pk.EncryptOne()
 		} else {
@@ -122,7 +128,7 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, rowIndex
 		}
 	}
 
-	for i := 0; i < dbmd.Width; i++ {
+	for i := 0; i < dimWidth; i++ {
 		if i == colIndex {
 			col[i] = pk.EncryptOneAtLevel(paillier.EncLevelTwo)
 		} else {
