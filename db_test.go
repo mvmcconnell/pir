@@ -12,6 +12,7 @@ import (
 // test configuration parameters
 const DBHeight = 1 << 5
 const DBSize = 1 << 10
+
 const MinGroupSize = 1
 const MaxGroupSize = 5
 const SlotBytes = 3
@@ -226,41 +227,41 @@ func BenchmarkQuerySecretSharesSingle8Thread(b *testing.B) {
 	}
 }
 
-// func BenchmarkEncryptedQueryAHESingleThread(b *testing.B) {
-// 	setup()
+func BenchmarkEncryptedQueryAHESingleThread(b *testing.B) {
+	setup()
 
-// 	_, pk := paillier.KeyGen(512)
-// 	db := GenerateRandomDB(DBSize, SlotBytes)
-// 	query := db.NewEncryptedQuery(pk, DBHeight, 1, 0)
+	_, pk := paillier.KeyGen(512)
+	db := GenerateRandomDB(DBSize, SlotBytes)
+	query := db.NewEncryptedQuery(pk, int(DBSize/DBHeight), DBHeight, 1, 0)
 
-// 	b.ResetTimer()
+	b.ResetTimer()
 
-// 	for i := 0; i < b.N; i++ {
-// 		_, err := db.PrivateEncryptedQuery(query, 1)
+	for i := 0; i < b.N; i++ {
+		_, err := db.PrivateEncryptedQuery(query, 1)
 
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 	}
-// }
+		if err != nil {
+			panic(err)
+		}
+	}
+}
 
-// func BenchmarkEncryptedQueryAHE8Thread(b *testing.B) {
-// 	setup()
+func BenchmarkEncryptedQueryAHE8Thread(b *testing.B) {
+	setup()
 
-// 	_, pk := paillier.KeyGen(512)
-// 	db := GenerateRandomDB(DBSize, SlotBytes)
-// 	query := db.NewEncryptedQuery(pk, DBHeight, 1, 0)
+	_, pk := paillier.KeyGen(512)
+	db := GenerateRandomDB(DBSize, SlotBytes)
+	query := db.NewEncryptedQuery(pk, int(DBSize/DBHeight), DBHeight, 1, 0)
 
-// 	b.ResetTimer()
+	b.ResetTimer()
 
-// 	for i := 0; i < b.N; i++ {
-// 		_, err := db.PrivateEncryptedQuery(query, 8)
+	for i := 0; i < b.N; i++ {
+		_, err := db.PrivateEncryptedQuery(query, 8)
 
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 	}
-// }
+		if err != nil {
+			panic(err)
+		}
+	}
+}
 
 func BenchmarkRecursiveEncryptedQueryAHESingleThread(b *testing.B) {
 	setup()
