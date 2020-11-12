@@ -2,9 +2,9 @@ package pir
 
 import (
 	"math"
-	"math/big"
 	"math/rand"
 
+	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
 )
 
@@ -17,38 +17,47 @@ type QueryShare struct {
 	IsKeywordBased bool
 	IsTwoParty     bool
 	ShareNumber    uint
-	DimHeight      int // height of the database
+	GroupSize      int // height of the database
 }
 
 // EncryptedQuery is an encryption of a point function
 // that evaluates to 1 at the desired row in the database
 // bits = (0, 0,.., 1, ...0, 0)
 type EncryptedQuery struct {
-	Pk    *paillier.PublicKey
-	EBits []*paillier.Ciphertext
+	Pk                *paillier.PublicKey
+	EBits             []*paillier.Ciphertext
+	GroupSize         int
+	DBWidth, DBHeight int // if a specific will force these dimentiojs
 }
 
 // DoublyEncryptedQuery consists of two encrypted point functions
 // that evaluates to 1 at the desired row and column in the database
 type DoublyEncryptedQuery struct {
-	Pk        *paillier.PublicKey
-	EBitsRow  []*paillier.Ciphertext
-	EBitsCol  []*paillier.Ciphertext
-	GroupSize int // how many elements to return
+	Pk                *paillier.PublicKey
+	EBitsRow          []*paillier.Ciphertext
+	EBitsCol          []*paillier.Ciphertext
+	GroupSize         int // number of slots to retrieve at once
+	DBWidth, DBHeight int // required for consistency
 }
 
 // NewIndexQueryShares generates PIR query shares for the index
-func (dbmd *DBMetadata) NewIndexQueryShares(index uint, height int, numShares uint) []*QueryShare {
-	return dbmd.newQueryShares(index, numShares, height, true)
+func (dbmd *DBMetadata) NewIndexQueryShares(index uint, groupSize int, numShares uint) []*QueryShare {
+	return dbmd.newQueryShares(index, groupSize, numShares, true)
 }
 
 // NewKeywordQueryShares generates keyword-based PIR query shares for keyword
-func (dbmd *DBMetadata) NewKeywordQueryShares(keyword uint, height int, numShares uint) []*QueryShare {
-	return dbmd.newQueryShares(keyword, numShares, height, false)
+func (dbmd *DBMetadata) NewKeywordQueryShares(keyword uint, groupSize int, numShares uint) []*QueryShare {
+	return dbmd.newQueryShares(keyword, groupSize, numShares, false)
 }
 
 // NewQueryShares generates random PIR query shares for the index
-func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, dimHeight int, isIndexQuery bool) []*QueryShare {
+func (dbmd *DBMetadata) newQueryShares(key uint, groupSize int, numShares uint, isIndexQuery bool) []*QueryShare {
+
+	dimHeight := int(math.Ceil(float64(dbmd.DBSize / groupSize))) // need groupSize elements back
+
+	if dimHeight == 0 {
+		panic("database height is set to zero; something is wrong")
+	}
 
 	// num bits to represent the index
 	numBits := uint(math.Log2(float64(dimHeight)) + 1)
@@ -79,7 +88,7 @@ func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, dimHeight int, 
 		shares[i].ShareNumber = uint(i)
 		shares[i].PrfKeys = pf.PrfKeys
 		shares[i].IsKeywordBased = !isIndexQuery
-		shares[i].DimHeight = dimHeight
+		shares[i].GroupSize = groupSize
 
 		if numShares == 2 {
 			shares[i].KeyTwoParty = dpfKeysTwoParty[i]
@@ -94,7 +103,7 @@ func (dbmd *DBMetadata) newQueryShares(key uint, numShares uint, dimHeight int, 
 }
 
 // NewEncryptedQuery generates a new encrypted point function that acts as a PIR query
-func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, height int, index int) *EncryptedQuery {
+func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, height, width, groupSize, index int) *EncryptedQuery {
 
 	res := make([]*paillier.Ciphertext, height)
 	for i := 0; i < height; i++ {
@@ -106,21 +115,20 @@ func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, height int, in
 	}
 
 	return &EncryptedQuery{
-		Pk:    pk,
-		EBits: res,
+		Pk:        pk,
+		EBits:     res,
+		GroupSize: groupSize,
+		DBWidth:   width,
+		DBHeight:  height,
 	}
 }
 
 // NewDoublyEncryptedQuery generates two encrypted point function that acts as a PIR query
 // to select the row and column in the database
-func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, height int, rowIndex, colIndex int) *DoublyEncryptedQuery {
+func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, width, height, groupSize, rowIndex, colIndex int) *DoublyEncryptedQuery {
 
-	// width of databse given query.height
-	dimWidth, dimHeight := dbmd.GetDimentionsForDatabase(height)
-
-	row := make([]*paillier.Ciphertext, dimHeight)
-	col := make([]*paillier.Ciphertext, dimWidth)
-	for i := 0; i < dimHeight; i++ {
+	row := make([]*paillier.Ciphertext, height)
+	for i := 0; i < height; i++ {
 		if i == rowIndex {
 			row[i] = pk.EncryptOne()
 		} else {
@@ -128,7 +136,8 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, height i
 		}
 	}
 
-	for i := 0; i < dimWidth; i++ {
+	col := make([]*paillier.Ciphertext, width)
+	for i := 0; i < width; i++ {
 		if i == colIndex {
 			col[i] = pk.EncryptOneAtLevel(paillier.EncLevelTwo)
 		} else {
@@ -137,9 +146,12 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, height i
 	}
 
 	return &DoublyEncryptedQuery{
-		Pk:       pk,
-		EBitsRow: row,
-		EBitsCol: col,
+		Pk:        pk,
+		EBitsRow:  row,
+		EBitsCol:  col,
+		GroupSize: groupSize,
+		DBWidth:   width,
+		DBHeight:  height,
 	}
 }
 
@@ -172,37 +184,43 @@ func RecoverEncrypted(res *EncryptedQueryResult, sk *paillier.SecretKey) []*Slot
 
 	// iterate over all the encrypted slots
 	for i, eslot := range res.Slots {
-		arr := make([]*big.Int, len(eslot.Cts))
+		arr := make([]*gmp.Int, len(eslot.Cts))
 		for j, ct := range eslot.Cts {
-			arr[j] = paillier.ToBigInt(sk.Decrypt(ct))
+			arr[j] = sk.Decrypt(ct)
 		}
 
-		slots[i] = NewSlotFromBigIntArray(arr, res.SlotBytes, res.NumBytesPerCiphertext)
+		slots[i] = NewSlotFromGmpIntArray(arr, res.SlotBytes, res.NumBytesPerCiphertext)
 	}
 
 	return slots
 }
 
 // RecoverDoublyEncrypted decryptes the encrypted slot and returns slot
-func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *paillier.SecretKey) *Slot {
+func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *paillier.SecretKey) []*Slot {
 
-	ciphertexts := make([]*paillier.Ciphertext, len(res.Slot.Cts))
-	for i, ct := range res.Slot.Cts {
+	slots := make([]*Slot, len(res.Slots))
 
-		// TODO: modify paillier to make this process cleaner
-		ctValue := sk.Decrypt(ct)
-		ct := &paillier.Ciphertext{C: ctValue, Level: paillier.EncLevelOne}
-		ciphertexts[i] = ct
+	for i, slot := range res.Slots {
+		ciphertexts := make([]*paillier.Ciphertext, len(slot.Cts))
+		for j, ct := range slot.Cts {
+
+			// TODO: modify paillier to make this process cleaner
+			ctValue := sk.Decrypt(ct)
+			ct := &paillier.Ciphertext{C: ctValue, Level: paillier.EncLevelOne}
+			ciphertexts[j] = ct
+		}
+
+		arr := make([]*gmp.Int, len(ciphertexts))
+		for j, c := range ciphertexts {
+			arr[j] = sk.Decrypt(c)
+		}
+
+		slot := NewSlotFromGmpIntArray(arr, res.SlotBytes, res.NumBytesPerCiphertext)
+
+		slots[i] = slot
 	}
 
-	arr := make([]*big.Int, len(ciphertexts))
-	for j, c := range ciphertexts {
-		arr[j] = paillier.ToBigInt(sk.Decrypt(c))
-	}
-
-	slot := NewSlotFromBigIntArray(arr, res.SlotBytes, res.NumBytesPerCiphertext)
-
-	return slot
+	return slots
 }
 
 func randomBits(n int) []bool {

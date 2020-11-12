@@ -27,7 +27,7 @@ func TestToFromBigIntArray(t *testing.T) {
 			panic(err)
 		}
 
-		if _, _, err := NewSlot(slotData).ToBigIntArray(0); err == nil {
+		if _, _, err := NewSlot(slotData).ToGmpIntArray(0); err == nil {
 			t.Fatal("Did not throw error when 0 chunks specified")
 		}
 
@@ -35,7 +35,7 @@ func TestToFromBigIntArray(t *testing.T) {
 		// chunks than there are bytes
 		for i := 1; i < numBytes*2; i++ {
 			slot := NewSlot(slotData)
-			ints, numBytesPerInt, err := slot.ToBigIntArray(i)
+			ints, numBytesPerInt, err := slot.ToGmpIntArray(i)
 
 			if err != nil {
 				t.Fatal(err)
@@ -51,7 +51,7 @@ func TestToFromBigIntArray(t *testing.T) {
 				)
 			}
 
-			recovered := NewSlotFromBigIntArray(ints, numBytes, numBytesPerInt)
+			recovered := NewSlotFromGmpIntArray(ints, numBytes, numBytesPerInt)
 			if !recovered.Equal(slot) {
 				t.Fatalf(
 					"Incorrect conversion when chunking into %v chunks, expected %v, got %v\n",

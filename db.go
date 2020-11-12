@@ -1,6 +1,7 @@
 package pir
 
 import (
+	"errors"
 	"math"
 	"sync"
 
@@ -50,7 +51,7 @@ type EncryptedQueryResult struct {
 
 // DoublyEncryptedQueryResult is an array of encrypted slots
 type DoublyEncryptedQueryResult struct {
-	Slot                  *DoublyEncryptedSlot
+	Slots                 []*DoublyEncryptedSlot
 	Pk                    *paillier.PublicKey
 	SlotBytes             int
 	NumBytesPerCiphertext int
@@ -64,13 +65,14 @@ func NewDatabase() *Database {
 // PrivateSecretSharedQuery uses the provided PIR query to retreive a slot row
 func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*SecretSharedQueryResult, error) {
 
-	// width of databse given query.height
-	dimWidth := int(math.Ceil(float64(len(db.Slots) / query.DimHeight)))
+	// height of databse given query.GroupSize = dbWidth
+	dimWidth := query.GroupSize
+	dimHeight := int(math.Ceil(float64(db.DBSize / query.GroupSize)))
 
 	var wg sync.WaitGroup
 
 	// num bits to represent the index
-	numBits := uint(math.Log2(float64(dimWidth)) + 1)
+	numBits := uint(math.Log2(float64(dimHeight)) + 1)
 
 	// otherwise assume keyword based (32 bit keys)
 	if query.IsKeywordBased {
@@ -80,9 +82,9 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	// init server DPF
 	pf := ServerInitialize(query.PrfKeys, numBits)
 
-	bits := make([]bool, dimWidth)
+	bits := make([]bool, dimHeight)
 	// expand the DPF into the bits array
-	for i := 0; i < dimWidth; i++ {
+	for i := 0; i < dimHeight; i++ {
 		// key (index or uint) depending on whether
 		// the query is keyword based or index based
 		// when keyword based use FSS
@@ -121,65 +123,36 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 			}(i, key)
 
 			// launch nprocs threads in parallel to evaluate the DPF
-			if i%nprocs == 0 || i+1 == dimWidth {
+			if i%nprocs == 0 || i+1 == dimHeight {
 				wg.Wait()
 			}
 		}
 	}
 
 	// mapping of results; one for each process
-	results := make([][]*Slot, nprocs)
+	results := make([]*Slot, dimWidth)
 
-	nRowsPerProc := int(float64(dimWidth) / float64(nprocs))
-
-	for i := 0; i < nprocs; i++ {
-		results[i] = make([]*Slot, dimWidth)
-
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-
-			start := i * nRowsPerProc
-			end := i*nRowsPerProc + nRowsPerProc
-
-			// handle the edge case
-			if i+1 == nprocs {
-				end = dimWidth
-			}
-
-			// initialize the slots
-			for col := 0; col < dimWidth; col++ {
-				results[i][col] = &Slot{
-					Data: make([]byte, db.SlotBytes),
-				}
-			}
-
-			for row := start; row < end; row++ {
-				for col := 0; col < dimWidth; col++ {
-
-					slotIndex := row*dimWidth + col
-					// xor if bit is set and within bounds
-					if bits[row] && slotIndex < len(db.Slots) {
-						XorSlots(results[i][col], db.Slots[slotIndex])
-					}
-				}
-			}
-
-		}(i)
-	}
-
-	wg.Wait()
-
-	result := make([]*Slot, len(results[0]))
-	copy(result, results[0])
-
-	for i := 1; i < nprocs; i++ {
-		for j := 0; j < dimWidth; j++ {
-			XorSlots(result[j], results[i][j])
+	// initialize the slots
+	for col := 0; col < dimWidth; col++ {
+		results[col] = &Slot{
+			Data: make([]byte, db.SlotBytes),
 		}
 	}
 
-	return &SecretSharedQueryResult{db.SlotBytes, result}, nil
+	for row := 0; row < dimHeight; row++ {
+
+		if bits[row] {
+			for col := 0; col < dimWidth; col++ {
+				slotIndex := row*dimWidth + col
+				// xor if bit is set and within bounds
+				if slotIndex < len(db.Slots) {
+					XorSlots(results[col], db.Slots[slotIndex])
+				}
+			}
+		}
+	}
+
+	return &SecretSharedQueryResult{db.SlotBytes, results}, nil
 }
 
 func nullCiphertext(level paillier.EncryptionLevel) *paillier.Ciphertext {
@@ -193,7 +166,7 @@ func nullCiphertext(level paillier.EncryptionLevel) *paillier.Ciphertext {
 func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*EncryptedQueryResult, error) {
 
 	// width of databse given query.height
-	dimWidth, dimHeight := db.GetDimentionsForDatabase(len(query.EBits))
+	dimWidth, dimHeight := query.DBWidth, query.DBHeight
 
 	// how many ciphertexts are needed to represent a slot
 	msgSpaceBytes := float64(len(query.Pk.N.Bytes()) - 2)
@@ -243,7 +216,7 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 					}
 
 					// convert the slot into big.Int array
-					intArr, numBytesPerInt, err := db.Slots[slotIndex].ToBigIntArray(numCiphertextsPerSlot)
+					intArr, numBytesPerInt, err := db.Slots[slotIndex].ToGmpIntArray(numCiphertextsPerSlot)
 					if err != nil {
 						panic(err)
 					}
@@ -254,7 +227,7 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 					}
 
 					for j, val := range intArr {
-						sel := query.Pk.ConstMult(query.EBits[row], paillier.ToGmpInt(val))
+						sel := query.Pk.ConstMult(query.EBits[row], val)
 						slotRes[i][col].Cts[j] = query.Pk.Add(slotRes[i][col].Cts[j], sel)
 					}
 				}
@@ -286,14 +259,19 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 // applying PrivateEncryptedQuery
 func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, nprocs int) (*DoublyEncryptedQueryResult, error) {
 
-	// width of databse given query.height
-	dimWidth := int(math.Ceil(float64(len(db.Slots) / len(query.EBitsRow))))
+	if query.GroupSize > db.DBSize || query.GroupSize == 0 {
+		return nil, errors.New("invalid group size provided in query")
+	}
 
 	// execute the row PIR query to get the encrypted row containing the result
 	rowQuery := &EncryptedQuery{
-		Pk:    query.Pk,
-		EBits: query.EBitsRow,
+		Pk:        query.Pk,
+		EBits:     query.EBitsRow,
+		GroupSize: 1, // return a single row
+		DBWidth:   query.DBWidth * query.GroupSize,
+		DBHeight:  query.DBHeight,
 	}
+
 	rowQueryRes, err := db.PrivateEncryptedQuery(rowQuery, nprocs)
 	if err != nil {
 		return nil, err
@@ -302,47 +280,58 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 	// number of ciphertexts needed to encrypt a slot
 	numCiphertextsPerSlot := len(rowQueryRes.Slots[0].Cts)
 
-	// need to encrypt each of the ciphertexts representing one slot
-	res := make([]*paillier.Ciphertext, numCiphertextsPerSlot)
-
-	// initialize the slots
-	for col := 0; col < numCiphertextsPerSlot; col++ {
-		res[col] = nullCiphertext(paillier.EncLevelTwo)
+	if len(rowQueryRes.Slots)%query.GroupSize != 0 {
+		panic("row has a size that is not a multiple of the group size")
 	}
 
-	// apply the PIR column query to get the desired column ciphertext
-	for col := 0; col < dimWidth; col++ {
+	// need to encrypt each of the ciphertexts representing one slot
+	// res is a 2D array where each row is an encrypted slot composed of possibly multiple ciphertexts
+	res := make([][]*paillier.Ciphertext, query.GroupSize)
 
-		// "selection" bit
-		bitCt := query.EBitsCol[col]
-
-		slotCiphertexts := rowQueryRes.Slots[col].Cts
-		for i, slotCiphertext := range slotCiphertexts {
-			ctBytes := slotCiphertext.C.Bytes()
-			ctSlot := &Slot{
-				Data: ctBytes,
-			}
-
-			// each column ciphertext can encrypted one row ciphertext (see paillier)
-			intArr, _, err := ctSlot.ToBigIntArray(1)
-			if err != nil {
-				panic(err)
-			}
-
-			for _, val := range intArr {
-				sel := query.Pk.ConstMult(bitCt, paillier.ToGmpInt(val))
-				res[i] = query.Pk.Add(res[i], sel)
-			}
+	// initialize the slots
+	for i := 0; i < query.GroupSize; i++ {
+		res[i] = make([]*paillier.Ciphertext, numCiphertextsPerSlot)
+		for j := 0; j < numCiphertextsPerSlot; j++ {
+			res[i][j] = nullCiphertext(paillier.EncLevelTwo)
 		}
 	}
 
-	resSlot := &DoublyEncryptedSlot{
-		Cts: res,
+	// group memeber
+	member := 0
+
+	// apply the PIR column query to get the desired column ciphertext
+	for col := 0; col < len(rowQueryRes.Slots); col++ {
+
+		if col%query.GroupSize == 0 {
+			member = 0
+		}
+
+		// "selection" bit
+		bitIndex := int(col / query.GroupSize)
+		bitCt := query.EBitsCol[bitIndex]
+
+		slotCiphertexts := rowQueryRes.Slots[col].Cts
+		for j, slotCiphertext := range slotCiphertexts {
+			ctVal := slotCiphertext.C
+
+			sel := query.Pk.ConstMult(bitCt, ctVal)
+			res[member][j] = query.Pk.Add(res[member][j], sel)
+		}
+
+		member++
+	}
+
+	resSlots := make([]*DoublyEncryptedSlot, query.GroupSize)
+
+	for i, cts := range res {
+		resSlots[i] = &DoublyEncryptedSlot{
+			Cts: cts,
+		}
 	}
 
 	queryResult := &DoublyEncryptedQueryResult{
 		Pk:                    query.Pk,
-		Slot:                  resSlot,
+		Slots:                 resSlots,
 		NumBytesPerCiphertext: rowQueryRes.NumBytesPerCiphertext,
 		SlotBytes:             db.SlotBytes,
 	}
@@ -367,6 +356,7 @@ func (db *Database) BuildForDataWithSlotSize(data []string, slotSize int) {
 
 	db.Slots = make([]*Slot, len(data))
 	db.SlotBytes = slotSize
+	db.DBSize = len(data)
 
 	for i := 0; i < len(data); i++ {
 		slotData := make([]byte, slotSize)
@@ -394,9 +384,31 @@ func (dbmd *DBMetadata) IndexToCoordinates(index, width, height int) (int, int) 
 }
 
 // GetDimentionsForDatabase returns the width and height given a height constraint
-func (dbmd *DBMetadata) GetDimentionsForDatabase(height int) (int, int) {
+// height is the desired height of the database (number of rows)
+// groupSize is the number of *adjacent* slots needed to constitute a "group" (default = 1)
+func (dbmd *DBMetadata) GetDimentionsForDatabase(height int, groupSize int) (int, int) {
+	return dbmd.GetDimentionsForDatabaseWidthMultiple(height, groupSize, 1)
+}
+
+// GetDimentionsForDatabaseWidthMultiple returns width and height for the database such that
+// widthMultiple is a multiple of the width value
+func (dbmd *DBMetadata) GetDimentionsForDatabaseWidthMultiple(height int, groupSize int, widthMultiple int) (int, int) {
 	dimWidth := int(math.Ceil(float64(dbmd.DBSize / height)))
+
+	// make the dimWidth a multiple of groupSize
+	if dimWidth%groupSize != 0 {
+		dimWidth += groupSize - dimWidth%groupSize // next multiple
+	}
+
 	dimHeight := height
+
+	// make sure the width is a multiple of widthMultiple
+	if widthMultiple > 0 && dimWidth%widthMultiple != 0 {
+		dimWidth += widthMultiple - dimWidth%widthMultiple // next multiple
+	}
+
+	// trim the height to fit the database without extra rows
+	dimHeight = int(math.Ceil(float64(dbmd.DBSize / dimWidth)))
 
 	return dimWidth, dimHeight
 }

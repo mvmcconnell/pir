@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"math"
-	"math/big"
+
+	"github.com/ncw/gmp"
 )
 
 // Slot is a set of bytes which can be xor'ed and comapred
@@ -53,9 +54,9 @@ func (slot *Slot) ToString() string {
 	return string(removeTrailingZeros(slot.Data))
 }
 
-// ToBigIntArray converts the slot into an array of
+// ToGmpIntArray converts the slot into an array of
 // big.Ints where
-func (slot *Slot) ToBigIntArray(numChuncks int) ([]*big.Int, int, error) {
+func (slot *Slot) ToGmpIntArray(numChuncks int) ([]*gmp.Int, int, error) {
 
 	if numChuncks <= 0 {
 		return nil, -1, errors.New("cannot divide data indo 0 chuncks")
@@ -63,13 +64,13 @@ func (slot *Slot) ToBigIntArray(numChuncks int) ([]*big.Int, int, error) {
 
 	numBytesPerChunck := int(math.Max(1, math.Ceil(float64(len(slot.Data))/float64(numChuncks))))
 
-	res := make([]*big.Int, numChuncks)
+	res := make([]*gmp.Int, numChuncks)
 	for i := 0; i < numChuncks; i++ {
 
 		start := i * numBytesPerChunck
 		end := int(math.Min(float64(len(slot.Data)), float64(start+numBytesPerChunck)))
 
-		res[i] = new(big.Int)
+		res[i] = new(gmp.Int)
 
 		// don't fill in the bytes if more chunks
 		// specified than there is data
@@ -83,10 +84,10 @@ func (slot *Slot) ToBigIntArray(numChuncks int) ([]*big.Int, int, error) {
 	return res, numBytesPerChunck, nil
 }
 
-// NewSlotFromBigIntArray parses an array of ints into a slot type
+// NewSlotFromGmpIntArray parses an array of ints into a slot type
 // numBytes is the final size of the slot
 // numBytesPerInt the the number of bytes to extract from each int
-func NewSlotFromBigIntArray(arr []*big.Int, numBytes int, numBytesPerInt int) *Slot {
+func NewSlotFromGmpIntArray(arr []*gmp.Int, numBytes int, numBytesPerInt int) *Slot {
 
 	// each encrypted slot has an array of ciphertexts
 	// encoding the slot data
