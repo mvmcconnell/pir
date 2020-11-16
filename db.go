@@ -147,6 +147,8 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 				// xor if bit is set and within bounds
 				if slotIndex < len(db.Slots) {
 					XorSlots(results[col], db.Slots[slotIndex])
+				} else {
+					break
 				}
 			}
 		}
@@ -272,6 +274,7 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 		DBHeight:  query.DBHeight,
 	}
 
+	// get the row
 	rowQueryRes, err := db.PrivateEncryptedQuery(rowQuery, nprocs)
 	if err != nil {
 		return nil, err

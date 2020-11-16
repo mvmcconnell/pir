@@ -9,7 +9,7 @@ import (
 	"encoding/binary"
 )
 
-// Initialize client with this function
+// ClientInitialize client with this function
 // numBits represents the input domain for the function, i.e. the number
 // of bits to check
 func ClientInitialize(numBits uint) *Dpf {
