@@ -2,10 +2,15 @@ package pir
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
 )
+
+/*
+ Single-server AHE variant of ASPIR
+*/
 
 // AuthToken is provided by the client to prove knowledge of the
 // access key associated with the retrieved item
@@ -101,6 +106,79 @@ func AuthCheck(pk *paillier.PublicKey, chalToken *ChalToken, proofToken *ProofTo
 	check = pk.EncryptWithRAtLevel(check.C, proofToken.S, paillier.EncLevelTwo)
 
 	if check.C.Cmp(ct2.C) != 0 {
+		return false
+	}
+
+	return true
+}
+
+/*
+ Secret shared DPF variant of ASPIR
+*/
+
+// AuditTokenShare is a secret share of an audit token
+// used to authenticate two-server PIR queries
+type AuditTokenShare struct {
+	T *Slot
+}
+
+// AuthTokenShare is a share of the key associated with the queried item
+type AuthTokenShare struct {
+	T *Slot
+}
+
+// AuthTokenSharesForKey generates auth token shares for a specific AuthKey (encoded as a slot)
+func AuthTokenSharesForKey(authKey *Slot, numShares int) []*AuthTokenShare {
+
+	numBytes := len(authKey.Data)
+	shares := make([]*AuthTokenShare, numShares)
+	accumulator := NewEmptySlot(numBytes)
+
+	for i := 1; i < numShares; i++ {
+		share := NewRandomSlot(numBytes)
+		XorSlots(accumulator, share)
+		shares[i] = &AuthTokenShare{share}
+	}
+
+	XorSlots(accumulator, authKey)
+	shares[0] = &AuthTokenShare{accumulator}
+
+	return shares
+}
+
+// GenerateAuditForSharedQuery generates an audit share that is sent to the other server(s)
+func GenerateAuditForSharedQuery(
+	keyDB *Database,
+	query *QueryShare,
+	authToken *AuthTokenShare,
+	nprocs int) (*AuditTokenShare, error) {
+
+	res, err := keyDB.PrivateSecretSharedQuery(query, nprocs)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(res.Shares) != 1 {
+		return nil, errors.New("Invalid challenge ciphertext result")
+	}
+
+	keySlotShare := res.Shares[0]
+	XorSlots(keySlotShare, authToken.T)
+	return &AuditTokenShare{keySlotShare}, nil
+}
+
+// CheckAudit outputs True of all provided audit tokens xor to zero
+func CheckAudit(auditTokens ...*AuditTokenShare) bool {
+
+	res := NewEmptySlot(len(auditTokens[0].T.Data))
+	for _, tok := range auditTokens {
+		XorSlots(res, tok.T)
+	}
+
+	fmt.Println(res.Data)
+
+	// make sure the resulting slot is all zero
+	if ints, _, _ := res.ToGmpIntArray(1); ints[0].Cmp(gmp.NewInt(0)) != 0 {
 		return false
 	}
 

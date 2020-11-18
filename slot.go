@@ -2,7 +2,9 @@ package pir
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"math"
 
 	"github.com/ncw/gmp"
@@ -54,8 +56,8 @@ func (slot *Slot) ToString() string {
 	return string(removeTrailingZeros(slot.Data))
 }
 
-// ToGmpIntArray converts the slot into an array of
-// big.Ints where
+// ToGmpIntArray converts the slot into an array of gmp.Ints
+// returns array of gmp.Ints, number of bytes per  int
 func (slot *Slot) ToGmpIntArray(numChuncks int) ([]*gmp.Int, int, error) {
 
 	if numChuncks <= 0 {
@@ -141,6 +143,24 @@ func NewSlot(b []byte) *Slot {
 	return &Slot{
 		Data: b,
 	}
+}
+
+// NewEmptySlot returns an all-zero slot
+func NewEmptySlot(numBytes int) *Slot {
+	return &Slot{
+		Data: make([]byte, numBytes),
+	}
+}
+
+// NewRandomSlot returns a slot filled with random bytes
+func NewRandomSlot(numBytes int) *Slot {
+	slotData := make([]byte, numBytes)
+	_, err := rand.Read(slotData)
+	if err != nil {
+		panic(fmt.Sprintf("Generating random bytes failed with %v\n", err))
+	}
+
+	return &Slot{slotData}
 }
 
 // GetRequiredSlotSize returns the minimum number of

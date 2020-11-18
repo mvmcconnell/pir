@@ -7,7 +7,7 @@ import (
 	"github.com/sachaservan/paillier"
 )
 
-// run with 'go test -v -run TestDoublyEncryptedQuery' to see log outputs.
+// run with 'go test -v -run TestASPIR' to see log outputs.
 func TestASPIR(t *testing.T) {
 	setup()
 
@@ -45,6 +45,35 @@ func TestASPIR(t *testing.T) {
 		ok := AuthCheck(pk, chalToken, proofToken)
 		if !ok {
 			t.Fatalf("ASPIR proof failed")
+		}
+
+	}
+}
+
+// run with 'go test -v -run TestSharedASPIR' to see log outputs.
+func TestSharedASPIR(t *testing.T) {
+	setup()
+
+	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
+
+	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+
+	for i := 0; i < NumQueries; i++ {
+		index := uint(rand.Intn(TestDBSize))
+
+		// generate auth token consisiting of double encryption of the key
+		authKey := keydb.Slots[index]
+		authTokenShares := AuthTokenSharesForKey(authKey, 2)
+		queryShares := keydb.NewIndexQueryShares(index, 1, 2)
+
+		audits := make([]*AuditTokenShare, 2)
+		audits[0], _ = GenerateAuditForSharedQuery(keydb, queryShares[0], authTokenShares[0], 1)
+		audits[1], _ = GenerateAuditForSharedQuery(keydb, queryShares[1], authTokenShares[1], 1)
+
+		// generate proof
+		ok := CheckAudit(audits...)
+		if !ok {
+			t.Fatalf("Secret shared ASPIR proof failed")
 		}
 
 	}
