@@ -5,6 +5,8 @@ import (
 	"math"
 	"sync"
 
+	"pir/dpf"
+
 	"github.com/sachaservan/paillier"
 )
 
@@ -80,7 +82,7 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	}
 
 	// init server DPF
-	pf := ServerInitialize(query.PrfKeys, numBits)
+	pf := dpf.ServerInitialize(query.PrfKeys, numBits)
 
 	bits := make([]bool, dimHeight)
 	// expand the DPF into the bits array

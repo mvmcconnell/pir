@@ -2,7 +2,7 @@ package pir
 
 import (
 	"math"
-	"math/rand"
+	"pir/dpf"
 
 	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
@@ -11,9 +11,9 @@ import (
 // QueryShare is a secret share of a query over the database
 // to retrieve a row
 type QueryShare struct {
-	KeyTwoParty    *Key2P
-	KeyMultiParty  *KeyMP
-	PrfKeys        []*PrfKey
+	KeyTwoParty    *dpf.Key2P
+	KeyMultiParty  *dpf.KeyMP
+	PrfKeys        []*dpf.PrfKey
 	IsKeywordBased bool
 	IsTwoParty     bool
 	ShareNumber    uint
@@ -41,17 +41,17 @@ type DoublyEncryptedQuery struct {
 }
 
 // NewIndexQueryShares generates PIR query shares for the index
-func (dbmd *DBMetadata) NewIndexQueryShares(index uint, groupSize int, numShares uint) []*QueryShare {
+func (dbmd *DBMetadata) NewIndexQueryShares(index int, groupSize int, numShares uint) []*QueryShare {
 	return dbmd.newQueryShares(index, groupSize, numShares, true)
 }
 
 // NewKeywordQueryShares generates keyword-based PIR query shares for keyword
-func (dbmd *DBMetadata) NewKeywordQueryShares(keyword uint, groupSize int, numShares uint) []*QueryShare {
+func (dbmd *DBMetadata) NewKeywordQueryShares(keyword int, groupSize int, numShares uint) []*QueryShare {
 	return dbmd.newQueryShares(keyword, groupSize, numShares, false)
 }
 
 // NewQueryShares generates random PIR query shares for the index
-func (dbmd *DBMetadata) newQueryShares(key uint, groupSize int, numShares uint, isIndexQuery bool) []*QueryShare {
+func (dbmd *DBMetadata) newQueryShares(key int, groupSize int, numShares uint, isIndexQuery bool) []*QueryShare {
 
 	dimHeight := int(math.Ceil(float64(dbmd.DBSize / groupSize))) // need groupSize elements back
 
@@ -67,18 +67,18 @@ func (dbmd *DBMetadata) newQueryShares(key uint, groupSize int, numShares uint, 
 		numBits = uint(32)
 	}
 
-	pf := ClientInitialize(numBits)
+	pf := dpf.ClientInitialize(numBits)
 
-	var dpfKeysTwoParty []*Key2P
-	var dpfKeysMultiParty []*KeyMP
+	var dpfKeysTwoParty []*dpf.Key2P
+	var dpfKeysMultiParty []*dpf.KeyMP
 
 	if numShares == 2 {
-		dpfKeysTwoParty = pf.GenerateTwoServer(key, 1)
+		dpfKeysTwoParty = pf.GenerateTwoServer(uint(key), 1)
 	} else {
-		dpfKeysMultiParty = pf.GenerateMultiServer(key, 1, numShares)
+		dpfKeysMultiParty = pf.GenerateMultiServer(uint(key), 1, numShares)
 	}
 
-	if key >= uint(dimHeight) {
+	if key >= dimHeight {
 		panic("requesting key outside of domain")
 	}
 
@@ -103,7 +103,20 @@ func (dbmd *DBMetadata) newQueryShares(key uint, groupSize int, numShares uint, 
 }
 
 // NewEncryptedQuery generates a new encrypted point function that acts as a PIR query
-func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, height, width, groupSize, index int) *EncryptedQuery {
+// defaults to sqrt sized grid database layout
+func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, groupSize, index int) *EncryptedQuery {
+
+	// compute sqrt dimentions
+	height := int(math.Ceil(math.Sqrt(float64(dbmd.DBSize))))
+	var width int
+	width, height = dbmd.GetDimentionsForDatabase(height, groupSize)
+
+	return dbmd.NewEncryptedQueryWithDimentions(pk, width, height, groupSize, index)
+}
+
+// NewEncryptedQueryWithDimentions generates a new encrypted point function that acts as a PIR query
+// where the database is viewed as a width x height grid
+func (dbmd *DBMetadata) NewEncryptedQueryWithDimentions(pk *paillier.PublicKey, width, height, groupSize, index int) *EncryptedQuery {
 
 	res := make([]*paillier.Ciphertext, height)
 	for i := 0; i < height; i++ {
@@ -125,7 +138,21 @@ func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, height, width,
 
 // NewDoublyEncryptedQuery generates two encrypted point function that acts as a PIR query
 // to select the row and column in the database
-func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, width, height, groupSize, rowIndex, colIndex int) *DoublyEncryptedQuery {
+func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, groupSize, index int) *DoublyEncryptedQuery {
+
+	// compute sqrt dimentions
+	height := int(math.Ceil(math.Sqrt(float64(dbmd.DBSize))))
+	var width int
+	width, height = dbmd.GetDimentionsForDatabase(height, groupSize)
+
+	return dbmd.NewDoublyEncryptedQueryWithDimentions(pk, width, height, groupSize, index)
+}
+
+// NewDoublyEncryptedQueryWithDimentions generates two encrypted point function that acts as a PIR query
+// to select the row and column in the database that is viewed as a width x height grid
+func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.PublicKey, width, height, groupSize, index int) *DoublyEncryptedQuery {
+
+	rowIndex, colIndex := dbmd.IndexToCoordinates(index, width, height)
 
 	row := make([]*paillier.Ciphertext, height)
 	for i := 0; i < height; i++ {
@@ -221,18 +248,4 @@ func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *paillier.Secret
 	}
 
 	return slots
-}
-
-func randomBits(n int) []bool {
-
-	bits := make([]bool, n)
-	for i := 0; i < n; i++ {
-		if rand.Intn(2) == 1 {
-			bits[i] = true
-		} else {
-			bits[i] = false
-		}
-	}
-
-	return bits
 }

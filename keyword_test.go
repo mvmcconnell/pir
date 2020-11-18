@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
-	"strings"
 	"testing"
 )
 
@@ -20,47 +19,6 @@ func generateStringsInSequence(n int) []string {
 	}
 
 	return strings
-}
-
-func TestBuildBST(t *testing.T) {
-	setup()
-
-	for trial := 0; trial < NumTrials; trial++ {
-
-		numStrings := rand.Intn(1<<10) + 100
-
-		data := generateStringsInSequence(numStrings)
-		data = PadToPowerOf2(data)
-		layers, _ := buildBST(data, int(math.Ceil(math.Log2(float64(len(data))))))
-
-		if len(layers[0]) != 1 {
-			t.Fatalf("Expected %v element in layer %v; got %v\n", 1, 0, len(layers[0]))
-		}
-		numTotal := 0
-		for i := 1; i < len(layers); i++ {
-			expected := int(math.Pow(2, float64(i)))
-			if len(layers[i]) != expected {
-				t.Fatalf("Expected %v elements in layer %v; got %v\n", expected, i, len(layers[i]))
-			}
-
-			numTotal += expected
-		}
-
-		orderOk := true
-		lastLayer := len(layers) - 1
-		for i := 0; i < len(layers[lastLayer])-1; i++ {
-			if strings.Compare(layers[lastLayer][i], layers[lastLayer][i+1]) >= 1 {
-				t.Logf("Wrong order \"%v\" > \"%v\"\n", layers[lastLayer][i], layers[lastLayer][i+1])
-				orderOk = false
-				break
-			}
-		}
-
-		if !orderOk {
-			t.Fatalf("order is wrong\n")
-
-		}
-	}
 }
 
 func TestKeywordQuerySqrtST(t *testing.T) {
@@ -100,7 +58,7 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 				}
 			}
 
-			shares := sqst.SecondLayer.NewIndexQueryShares(uint(rowIndex), sqst.Height, 2)
+			shares := sqst.SecondLayer.NewIndexQueryShares(rowIndex, sqst.Height, 2)
 
 			resA, err := sqst.PrivateQuery(shares[0], NumProcsForQuery)
 			if err != nil {

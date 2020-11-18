@@ -13,5 +13,3 @@ const SlotBytes = 3
 const SlotBytesStep = 5
 const NumProcsForQuery = 4 // number of parallel processors
 const NumQueries = 50      // number of queries to run
-
-const StatisticalSecurityParam = 32 // 32 bits of stat sec

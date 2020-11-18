@@ -2,7 +2,6 @@ package pir
 
 import (
 	"math"
-	"sort"
 )
 
 // padding value to encode when formatting the database for PIR
@@ -118,57 +117,4 @@ func PadToSqrt(data []string) []string {
 	}
 
 	return newdata
-}
-
-// returns (layers, boundries)
-// layers does not include values from previous layers
-// boundries includes all values at the layer
-func buildBST(data []string, depth int) ([][]string, [][]string) {
-
-	// sort the strings
-	sort.Strings(data)
-
-	// TODO: make this function more elegant. It's a bit of a hack right now.
-	// Technically, all this function needs to do is extract the binary search tree
-	// boundries and place them into an array (one array per layer)
-	// This might be better to do recursively.
-
-	allBoundries := make(map[int]bool)
-	layers := make([][]string, depth)
-	boundries := make([][]string, depth)
-
-	layerIndex := 0
-	step := len(data) / 2 // len(data) is a power of two
-
-	numProcessed := 0
-	for i := depth - 1; i >= 0; i-- {
-		layers[layerIndex] = make([]string, 0)
-		boundries[layerIndex] = make([]string, 0)
-
-		// example with len(data) = 64
-		//                                32
-		//                16             [32]             48
-		//         8     [16]     24     [32]     40     [48]     56
-		//     4  [8] 12 [16] 20 [24] 28 [32] 36 [40] 44 [48] 52 [56] 60
-		// etc...
-
-		num := int(math.Pow(2, float64(layerIndex))) + numProcessed
-		nextIndex := step
-		for j := 0; j < num; j++ {
-			boundries[layerIndex] = append(boundries[layerIndex], data[nextIndex])
-
-			if exists, _ := allBoundries[nextIndex]; !exists {
-				layers[layerIndex] = append(layers[layerIndex], data[nextIndex])
-				allBoundries[nextIndex] = true
-				numProcessed++
-			}
-
-			nextIndex += step
-		}
-
-		step /= 2
-		layerIndex++
-	}
-
-	return layers, boundries
 }

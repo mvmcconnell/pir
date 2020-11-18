@@ -1,4 +1,4 @@
-package pir
+package dpf
 
 import (
 	"crypto/aes"

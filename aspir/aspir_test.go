@@ -1,33 +1,37 @@
-package pir
+package aspir
 
 import (
 	"math/rand"
+	"pir"
 	"testing"
 
 	"github.com/sachaservan/paillier"
 )
 
+const StatisticalSecurityParam = 32 // 32 bits of stat sec
+const TestDBHeight = 1 << 5
+const TestDBSize = 1 << 10
+const NumQueries = 50 // number of queries to run
+const BenchmarkDBHeight = 1 << 5
+const BenchmarkDBSize = 1 << 10
+
 // run with 'go test -v -run TestASPIR' to see log outputs.
 func TestASPIR(t *testing.T) {
-	setup()
-
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 	nprocs := 1
 
 	sk, pk := paillier.KeyGen(128)
 
-	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
-	dimWidth, dimHeight := keydb.GetDimentionsForDatabase(TestDBHeight, 1)
+	keydb := pir.GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
-		qRowIndex := rand.Intn(dimHeight)
-		qColIndex := rand.Intn(dimWidth) // this is the "group number" in the row
+		qIndex := rand.Intn(keydb.DBSize)
 
 		// generate auth token consisiting of double encryption of the key
-		authKey := keydb.Slots[qRowIndex*dimWidth+qColIndex]
+		authKey := keydb.Slots[qIndex]
 		authToken := AuthTokenForKey(pk, authKey)
 
-		query := keydb.NewDoublyEncryptedQuery(pk, dimWidth, dimHeight, 1, qRowIndex, qColIndex)
+		query := keydb.NewDoublyEncryptedQuery(pk, 1, qIndex)
 
 		// issue challenge
 		chalToken, err := AuthChalForQuery(secparam, keydb, query, authToken, nprocs)
@@ -52,14 +56,13 @@ func TestASPIR(t *testing.T) {
 
 // run with 'go test -v -run TestSharedASPIR' to see log outputs.
 func TestSharedASPIR(t *testing.T) {
-	setup()
 
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
-	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+	keydb := pir.GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
-		index := uint(rand.Intn(TestDBSize))
+		index := rand.Intn(TestDBSize)
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[index]
@@ -81,19 +84,16 @@ func TestSharedASPIR(t *testing.T) {
 }
 
 func BenchmarkChallenge(b *testing.B) {
-	setup()
-
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
 	_, pk := paillier.KeyGen(1024)
-	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
-	dimWidth, dimHeight := keydb.GetDimentionsForDatabase(BenchmarkDBHeight, 1)
+	keydb := pir.GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
 	authToken := AuthTokenForKey(pk, authKey)
 
-	query := keydb.NewDoublyEncryptedQuery(pk, dimWidth, dimHeight, 1, 0, 0)
+	query := keydb.NewDoublyEncryptedQuery(pk, 1, 0)
 
 	b.ResetTimer()
 
@@ -107,19 +107,16 @@ func BenchmarkChallenge(b *testing.B) {
 }
 
 func BenchmarkProve(b *testing.B) {
-	setup()
-
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
 	sk, pk := paillier.KeyGen(1024)
-	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
-	dimWidth, dimHeight := keydb.GetDimentionsForDatabase(BenchmarkDBHeight, 1)
+	keydb := pir.GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
 	authToken := AuthTokenForKey(pk, authKey)
 
-	query := keydb.NewDoublyEncryptedQuery(pk, dimWidth, dimHeight, 1, 0, 0)
+	query := keydb.NewDoublyEncryptedQuery(pk, 1, 0)
 	chalToken, _ := AuthChalForQuery(secparam, keydb, query, authToken, 1)
 
 	b.ResetTimer()

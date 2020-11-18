@@ -26,7 +26,7 @@ func TestSharedQuery(t *testing.T) {
 		dimHeight := int(math.Ceil(float64(TestDBSize / dimWidth)))
 
 		for i := 0; i < NumQueries; i++ {
-			qIndex := uint(rand.Intn(dimHeight))
+			qIndex := rand.Intn(dimHeight)
 			shares := db.NewIndexQueryShares(qIndex, groupSize, 2)
 
 			resA, err := db.PrivateSecretSharedQuery(shares[0], NumProcsForQuery)
@@ -79,7 +79,7 @@ func TestEncryptedQuery(t *testing.T) {
 			for i := 0; i < NumQueries; i++ {
 				qIndex := rand.Intn(dimHeight)
 
-				query := db.NewEncryptedQuery(pk, dimHeight, dimWidth, groupSize, qIndex)
+				query := db.NewEncryptedQuery(pk, groupSize, qIndex)
 
 				response, err := db.PrivateEncryptedQuery(query, NumProcsForQuery)
 				if err != nil {
@@ -94,7 +94,7 @@ func TestEncryptedQuery(t *testing.T) {
 
 				for j := 0; j < dimWidth; j++ {
 
-					index := int(qIndex)*dimWidth + j
+					index := qIndex*dimWidth + j
 					if index >= db.DBSize {
 						break
 					}
@@ -126,10 +126,9 @@ func TestDoublyEncryptedQuery(t *testing.T) {
 			dimWidth, dimHeight := db.GetDimentionsForDatabase(TestDBHeight, groupSize)
 
 			for i := 0; i < NumQueries; i++ {
-				qRowIndex := rand.Intn(dimHeight)
-				qColIndex := rand.Intn(dimWidth) // this is the "group number" in the row
+				qIndex := rand.Intn(dimWidth * dimHeight)
 
-				query := db.NewDoublyEncryptedQuery(pk, dimWidth, dimHeight, groupSize, qRowIndex, qColIndex)
+				query := db.NewDoublyEncryptedQuery(pk, groupSize, qIndex)
 				response, err := db.PrivateDoublyEncryptedQuery(query, NumProcsForQuery)
 				if err != nil {
 					t.Fatalf("%v", err)
@@ -139,7 +138,7 @@ func TestDoublyEncryptedQuery(t *testing.T) {
 
 				for col := 0; col < groupSize; col++ {
 
-					index := int(qRowIndex*dimWidth*groupSize + qColIndex*groupSize + col)
+					index := qIndex*groupSize + col
 					if index >= db.DBSize {
 						break
 					}
@@ -170,7 +169,7 @@ func BenchmarkQuerySecretShares(b *testing.B) {
 	setup()
 
 	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
-	queryA := db.NewIndexQueryShares(0, BenchmarkDBHeight, 2)[0]
+	queryA := db.NewIndexQueryShares(0, 1, 2)[0]
 
 	b.ResetTimer()
 
@@ -222,7 +221,7 @@ func BenchmarkEncryptedQueryAHESingleThread(b *testing.B) {
 
 	_, pk := paillier.KeyGen(1024)
 	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
-	query := db.NewEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0)
+	query := db.NewEncryptedQuery(pk, 1, 0)
 
 	b.ResetTimer()
 
@@ -240,7 +239,7 @@ func BenchmarkEncryptedQueryAHE8Thread(b *testing.B) {
 
 	_, pk := paillier.KeyGen(1024)
 	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
-	query := db.NewEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0)
+	query := db.NewEncryptedQuery(pk, 1, 0)
 
 	b.ResetTimer()
 
@@ -258,7 +257,7 @@ func BenchmarkRecursiveEncryptedQueryAHESingleThread(b *testing.B) {
 
 	_, pk := paillier.KeyGen(1024)
 	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
-	query := fakeDoublyEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0, 0)
+	query := fakeDoublyEncryptedQuery(pk, db.DBSize)
 
 	b.ResetTimer()
 
@@ -276,7 +275,7 @@ func BenchmarkRecursiveEncryptedQueryAHE8Thread(b *testing.B) {
 
 	_, pk := paillier.KeyGen(1024)
 	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
-	query := fakeDoublyEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0, 0)
+	query := fakeDoublyEncryptedQuery(pk, db.DBSize)
 
 	b.ResetTimer()
 
@@ -290,10 +289,16 @@ func BenchmarkRecursiveEncryptedQueryAHE8Thread(b *testing.B) {
 }
 
 // generates a "fake" PIR query to avoid costly randomness computation (useful for benchmarking query processing)
-func fakeDoublyEncryptedQuery(pk *paillier.PublicKey, width, height, groupSize, rowIndex, colIndex int) *DoublyEncryptedQuery {
+func fakeDoublyEncryptedQuery(pk *paillier.PublicKey, dbSize int) *DoublyEncryptedQuery {
 	zero := gmp.NewInt(0)
 	one := gmp.NewInt(1)
-	rand := pk.EncryptZero().C
+	rand := pk.EncryptZero().C // hack to get random number
+
+	// compute sqrt dimentions
+	height := int(math.Ceil(math.Sqrt(float64(dbSize))))
+	width := height
+	rowIndex := 0
+	colIndex := 0
 
 	row := make([]*paillier.Ciphertext, height)
 	for i := 0; i < height; i++ {
@@ -317,7 +322,7 @@ func fakeDoublyEncryptedQuery(pk *paillier.PublicKey, width, height, groupSize, 
 		Pk:        pk,
 		EBitsRow:  row,
 		EBitsCol:  col,
-		GroupSize: groupSize,
+		GroupSize: 1,
 		DBWidth:   width,
 		DBHeight:  height,
 	}

@@ -1,8 +1,8 @@
-package pir
+package aspir
 
 import (
 	"errors"
-	"fmt"
+	"pir"
 
 	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
@@ -34,7 +34,7 @@ type ProofToken struct {
 }
 
 // AuthTokenForKey generates an auth token for a specific AuthKey (encoded as a slot)
-func AuthTokenForKey(pk *paillier.PublicKey, authKey *Slot) *AuthToken {
+func AuthTokenForKey(pk *paillier.PublicKey, authKey *pir.Slot) *AuthToken {
 	authKeyInt := new(gmp.Int).SetBytes(authKey.Data)
 	authToken := &AuthToken{}
 	authToken.T = pk.Encrypt(authKeyInt)
@@ -45,8 +45,8 @@ func AuthTokenForKey(pk *paillier.PublicKey, authKey *Slot) *AuthToken {
 // AuthChalForQuery generates a challenge token for the provided PIR query
 func AuthChalForQuery(
 	secparam int,
-	keyDB *Database,
-	query *DoublyEncryptedQuery,
+	keyDB *pir.Database,
+	query *pir.DoublyEncryptedQuery,
 	authToken *AuthToken,
 	nprocs int) (*ChalToken, error) {
 
@@ -119,28 +119,28 @@ func AuthCheck(pk *paillier.PublicKey, chalToken *ChalToken, proofToken *ProofTo
 // AuditTokenShare is a secret share of an audit token
 // used to authenticate two-server PIR queries
 type AuditTokenShare struct {
-	T *Slot
+	T *pir.Slot
 }
 
 // AuthTokenShare is a share of the key associated with the queried item
 type AuthTokenShare struct {
-	T *Slot
+	T *pir.Slot
 }
 
 // AuthTokenSharesForKey generates auth token shares for a specific AuthKey (encoded as a slot)
-func AuthTokenSharesForKey(authKey *Slot, numShares int) []*AuthTokenShare {
+func AuthTokenSharesForKey(authKey *pir.Slot, numShares int) []*AuthTokenShare {
 
 	numBytes := len(authKey.Data)
 	shares := make([]*AuthTokenShare, numShares)
-	accumulator := NewEmptySlot(numBytes)
+	accumulator := pir.NewEmptySlot(numBytes)
 
 	for i := 1; i < numShares; i++ {
-		share := NewRandomSlot(numBytes)
-		XorSlots(accumulator, share)
+		share := pir.NewRandomSlot(numBytes)
+		pir.XorSlots(accumulator, share)
 		shares[i] = &AuthTokenShare{share}
 	}
 
-	XorSlots(accumulator, authKey)
+	pir.XorSlots(accumulator, authKey)
 	shares[0] = &AuthTokenShare{accumulator}
 
 	return shares
@@ -148,8 +148,8 @@ func AuthTokenSharesForKey(authKey *Slot, numShares int) []*AuthTokenShare {
 
 // GenerateAuditForSharedQuery generates an audit share that is sent to the other server(s)
 func GenerateAuditForSharedQuery(
-	keyDB *Database,
-	query *QueryShare,
+	keyDB *pir.Database,
+	query *pir.QueryShare,
 	authToken *AuthTokenShare,
 	nprocs int) (*AuditTokenShare, error) {
 
@@ -163,19 +163,17 @@ func GenerateAuditForSharedQuery(
 	}
 
 	keySlotShare := res.Shares[0]
-	XorSlots(keySlotShare, authToken.T)
+	pir.XorSlots(keySlotShare, authToken.T)
 	return &AuditTokenShare{keySlotShare}, nil
 }
 
 // CheckAudit outputs True of all provided audit tokens xor to zero
 func CheckAudit(auditTokens ...*AuditTokenShare) bool {
 
-	res := NewEmptySlot(len(auditTokens[0].T.Data))
+	res := pir.NewEmptySlot(len(auditTokens[0].T.Data))
 	for _, tok := range auditTokens {
-		XorSlots(res, tok.T)
+		pir.XorSlots(res, tok.T)
 	}
-
-	fmt.Println(res.Data)
 
 	// make sure the resulting slot is all zero
 	if ints, _, _ := res.ToGmpIntArray(1); ints[0].Cmp(gmp.NewInt(0)) != 0 {
