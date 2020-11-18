@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
 )
 
@@ -185,7 +186,7 @@ func BenchmarkQuerySecretShares(b *testing.B) {
 func BenchmarkQuerySecretSharesSingleThread(b *testing.B) {
 	setup()
 
-	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
+	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
 	queryA := db.NewIndexQueryShares(0, 1, 2)[0]
 
 	b.ResetTimer()
@@ -202,7 +203,7 @@ func BenchmarkQuerySecretSharesSingleThread(b *testing.B) {
 func BenchmarkQuerySecretSharesSingle8Thread(b *testing.B) {
 	setup()
 
-	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
+	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
 	queryA := db.NewIndexQueryShares(0, 1, 2)[0]
 
 	b.ResetTimer()
@@ -220,7 +221,7 @@ func BenchmarkEncryptedQueryAHESingleThread(b *testing.B) {
 	setup()
 
 	_, pk := paillier.KeyGen(1024)
-	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
+	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
 	query := db.NewEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0)
 
 	b.ResetTimer()
@@ -238,7 +239,7 @@ func BenchmarkEncryptedQueryAHE8Thread(b *testing.B) {
 	setup()
 
 	_, pk := paillier.KeyGen(1024)
-	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
+	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
 	query := db.NewEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0)
 
 	b.ResetTimer()
@@ -257,7 +258,7 @@ func BenchmarkRecursiveEncryptedQueryAHESingleThread(b *testing.B) {
 
 	_, pk := paillier.KeyGen(1024)
 	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
-	query := db.NewDoublyEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0, 0)
+	query := fakeDoublyEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0, 0)
 
 	b.ResetTimer()
 
@@ -274,16 +275,50 @@ func BenchmarkRecursiveEncryptedQueryAHE8Thread(b *testing.B) {
 	setup()
 
 	_, pk := paillier.KeyGen(1024)
-	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
-	query := db.NewDoublyEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBSize, 1, 0, 0)
+	db := GenerateEmptyDB(BenchmarkDBSize, SlotBytes)
+	query := fakeDoublyEncryptedQuery(pk, int(BenchmarkDBSize/BenchmarkDBHeight), BenchmarkDBHeight, 1, 0, 0)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := db.PrivateDoublyEncryptedQuery(query, 8)
+		_, err := db.PrivateDoublyEncryptedQuery(query, 2)
 
 		if err != nil {
 			panic(err)
 		}
+	}
+}
+
+// generates a "fake" PIR query to avoid costly randomness computation (useful for benchmarking query processing)
+func fakeDoublyEncryptedQuery(pk *paillier.PublicKey, width, height, groupSize, rowIndex, colIndex int) *DoublyEncryptedQuery {
+	zero := gmp.NewInt(0)
+	one := gmp.NewInt(1)
+	rand := pk.EncryptZero().C
+
+	row := make([]*paillier.Ciphertext, height)
+	for i := 0; i < height; i++ {
+		if i == rowIndex {
+			row[i] = pk.EncryptWithR(one, rand)
+		} else {
+			row[i] = pk.EncryptWithR(zero, rand)
+		}
+	}
+
+	col := make([]*paillier.Ciphertext, width)
+	for i := 0; i < width; i++ {
+		if i == colIndex {
+			col[i] = pk.EncryptWithRAtLevel(one, rand, paillier.EncLevelTwo)
+		} else {
+			col[i] = pk.EncryptWithRAtLevel(zero, rand, paillier.EncLevelTwo)
+		}
+	}
+
+	return &DoublyEncryptedQuery{
+		Pk:        pk,
+		EBitsRow:  row,
+		EBitsCol:  col,
+		GroupSize: groupSize,
+		DBWidth:   width,
+		DBHeight:  height,
 	}
 }
