@@ -2,7 +2,8 @@ package aspir
 
 import (
 	"errors"
-	"pir"
+
+	"github.com/sachaservan/pir"
 
 	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"

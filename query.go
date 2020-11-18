@@ -2,10 +2,10 @@ package pir
 
 import (
 	"math"
-	"pir/dpf"
 
 	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
+	"github.com/sachaservan/pir/dpf"
 )
 
 // QueryShare is a secret share of a query over the database

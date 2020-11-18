@@ -5,9 +5,8 @@ import (
 	"math"
 	"sync"
 
-	"pir/dpf"
-
 	"github.com/sachaservan/paillier"
+	"github.com/sachaservan/pir/dpf"
 )
 
 // DBMetadata contains information on the layout
