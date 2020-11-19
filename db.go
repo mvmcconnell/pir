@@ -262,29 +262,30 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 // applying PrivateEncryptedQuery
 func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, nprocs int) (*DoublyEncryptedQueryResult, error) {
 
-	if query.GroupSize > db.DBSize || query.GroupSize == 0 {
+	if query.Row.GroupSize > db.DBSize || query.Row.GroupSize == 0 {
 		return nil, errors.New("invalid group size provided in query")
 	}
 
-	// execute the row PIR query to get the encrypted row containing the result
-	rowQuery := &EncryptedQuery{
-		Pk:        query.Pk,
-		EBits:     query.EBitsRow,
-		GroupSize: 1, // return a single row
-		DBWidth:   query.DBWidth * query.GroupSize,
-		DBHeight:  query.DBHeight,
+	if query.Col.GroupSize > query.Row.DBWidth || query.Col.GroupSize == 0 {
+		return nil, errors.New("invalid group size provided in query")
 	}
 
 	// get the row
-	rowQueryRes, err := db.PrivateEncryptedQuery(rowQuery, nprocs)
+	rowQueryRes, err := db.PrivateEncryptedQuery(query.Row, nprocs)
 	if err != nil {
 		return nil, err
 	}
 
-	// number of ciphertexts needed to encrypt a slot
-	numCiphertextsPerSlot := len(rowQueryRes.Slots[0].Cts)
+	return db.PrivateEncryptedQueryOverEncryptedResult(query.Col, rowQueryRes, nprocs)
+}
 
-	if len(rowQueryRes.Slots)%query.GroupSize != 0 {
+// PrivateEncryptedQueryOverEncryptedResult executes the query over an encrypted query result
+func (db *Database) PrivateEncryptedQueryOverEncryptedResult(query *EncryptedQuery, result *EncryptedQueryResult, nprocs int) (*DoublyEncryptedQueryResult, error) {
+
+	// number of ciphertexts needed to encrypt a slot
+	numCiphertextsPerSlot := len(result.Slots[0].Cts)
+
+	if len(result.Slots)%query.GroupSize != 0 {
 		panic("row has a size that is not a multiple of the group size")
 	}
 
@@ -304,7 +305,7 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 	member := 0
 
 	// apply the PIR column query to get the desired column ciphertext
-	for col := 0; col < len(rowQueryRes.Slots); col++ {
+	for col := 0; col < len(result.Slots); col++ {
 
 		if col%query.GroupSize == 0 {
 			member = 0
@@ -312,9 +313,9 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 
 		// "selection" bit
 		bitIndex := int(col / query.GroupSize)
-		bitCt := query.EBitsCol[bitIndex]
+		bitCt := query.EBits[bitIndex]
 
-		slotCiphertexts := rowQueryRes.Slots[col].Cts
+		slotCiphertexts := result.Slots[col].Cts
 		for j, slotCiphertext := range slotCiphertexts {
 			ctVal := slotCiphertext.C
 
@@ -336,7 +337,7 @@ func (db *Database) PrivateDoublyEncryptedQuery(query *DoublyEncryptedQuery, npr
 	queryResult := &DoublyEncryptedQueryResult{
 		Pk:                    query.Pk,
 		Slots:                 resSlots,
-		NumBytesPerCiphertext: rowQueryRes.NumBytesPerCiphertext,
+		NumBytesPerCiphertext: result.NumBytesPerCiphertext,
 		SlotBytes:             db.SlotBytes,
 	}
 

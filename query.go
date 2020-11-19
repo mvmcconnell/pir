@@ -33,11 +33,8 @@ type EncryptedQuery struct {
 // DoublyEncryptedQuery consists of two encrypted point functions
 // that evaluates to 1 at the desired row and column in the database
 type DoublyEncryptedQuery struct {
-	Pk                *paillier.PublicKey
-	EBitsRow          []*paillier.Ciphertext
-	EBitsCol          []*paillier.Ciphertext
-	GroupSize         int // number of slots to retrieve at once
-	DBWidth, DBHeight int // required for consistency
+	Row *EncryptedQuery
+	Col *EncryptedQuery
 }
 
 // NewIndexQueryShares generates PIR query shares for the index
@@ -172,13 +169,25 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.Publi
 		}
 	}
 
-	return &DoublyEncryptedQuery{
+	rowQuery := &EncryptedQuery{
 		Pk:        pk,
-		EBitsRow:  row,
-		EBitsCol:  col,
+		EBits:     row,
+		GroupSize: 1,
+		DBWidth:   width * groupSize,
+		DBHeight:  height,
+	}
+
+	colQuery := &EncryptedQuery{
+		Pk:        pk,
+		EBits:     col,
 		GroupSize: groupSize,
 		DBWidth:   width,
 		DBHeight:  height,
+	}
+
+	return &DoublyEncryptedQuery{
+		Row: rowQuery,
+		Col: colQuery,
 	}
 }
 

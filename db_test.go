@@ -318,12 +318,24 @@ func fakeDoublyEncryptedQuery(pk *paillier.PublicKey, dbSize int) *DoublyEncrypt
 		}
 	}
 
-	return &DoublyEncryptedQuery{
+	rowQuery := &EncryptedQuery{
 		Pk:        pk,
-		EBitsRow:  row,
-		EBitsCol:  col,
+		EBits:     row,
+		GroupSize: 1,
+		DBWidth:   width * 1,
+		DBHeight:  height,
+	}
+
+	colQuery := &EncryptedQuery{
+		Pk:        pk,
+		EBits:     col,
 		GroupSize: 1,
 		DBWidth:   width,
 		DBHeight:  height,
+	}
+
+	return &DoublyEncryptedQuery{
+		Row: rowQuery,
+		Col: colQuery,
 	}
 }
