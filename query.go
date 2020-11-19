@@ -133,6 +133,17 @@ func (dbmd *DBMetadata) NewEncryptedQueryWithDimentions(pk *paillier.PublicKey, 
 	}
 }
 
+// NewDoublyEncryptedNullQuery generates a PIR query that does not retrieve any value
+func (dbmd *DBMetadata) NewDoublyEncryptedNullQuery(pk *paillier.PublicKey, groupSize int) *DoublyEncryptedQuery {
+
+	// compute sqrt dimentions
+	height := int(math.Ceil(math.Sqrt(float64(dbmd.DBSize))))
+	var width int
+	width, height = dbmd.GetDimentionsForDatabase(height, groupSize)
+
+	return dbmd.NewDoublyEncryptedQueryWithDimentions(pk, width, height, groupSize, -1) // index -1 generates the all-zero query
+}
+
 // NewDoublyEncryptedQuery generates two encrypted point function that acts as a PIR query
 // to select the row and column in the database
 func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, groupSize, index int) *DoublyEncryptedQuery {
@@ -149,7 +160,14 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, groupSiz
 // to select the row and column in the database that is viewed as a width x height grid
 func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.PublicKey, width, height, groupSize, index int) *DoublyEncryptedQuery {
 
-	rowIndex, colIndex := dbmd.IndexToCoordinates(index, width, height)
+	var rowIndex int
+	var colIndex int
+	if index == -1 {
+		rowIndex = -1
+		colIndex = -1
+	} else {
+		rowIndex, colIndex = dbmd.IndexToCoordinates(index, width, height)
+	}
 
 	row := make([]*paillier.Ciphertext, height)
 	for i := 0; i < height; i++ {
