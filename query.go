@@ -135,13 +135,7 @@ func (dbmd *DBMetadata) NewEncryptedQueryWithDimentions(pk *paillier.PublicKey, 
 
 // NewDoublyEncryptedNullQuery generates a PIR query that does not retrieve any value
 func (dbmd *DBMetadata) NewDoublyEncryptedNullQuery(pk *paillier.PublicKey, groupSize int) *DoublyEncryptedQuery {
-
-	// compute sqrt dimentions
-	height := int(math.Ceil(math.Sqrt(float64(dbmd.DBSize))))
-	var width int
-	width, height = dbmd.GetDimentionsForDatabase(height, groupSize)
-
-	return dbmd.NewDoublyEncryptedQueryWithDimentions(pk, width, height, groupSize, -1) // index -1 generates the all-zero query
+	return dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1) // index -1 generates the all-zero query
 }
 
 // NewDoublyEncryptedQuery generates two encrypted point function that acts as a PIR query
