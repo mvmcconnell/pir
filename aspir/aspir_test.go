@@ -2,10 +2,10 @@ package aspir
 
 import (
 	"math/rand"
-	"pir"
 	"testing"
 
 	"github.com/sachaservan/paillier"
+	"github.com/sachaservan/pir"
 )
 
 const StatisticalSecurityParam = 32 // 32 bits of stat sec
