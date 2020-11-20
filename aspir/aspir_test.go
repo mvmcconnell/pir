@@ -1,6 +1,7 @@
 package aspir
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -29,18 +30,18 @@ func TestASPIR(t *testing.T) {
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[qIndex]
-		authToken := AuthTokenForKey(pk, authKey)
-
-		query := keydb.NewDoublyEncryptedQuery(pk, 1, qIndex)
+		authQuery, bit := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, qIndex, authKey)
 
 		// issue challenge
-		chalToken, err := AuthChalForQuery(secparam, keydb, query, authToken, nprocs)
+		chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
 		if err != nil {
 			t.Fatal(err)
 		}
 
+		fmt.Printf("chalbit = %v\n", bit)
+
 		// generate proof
-		proofToken, err := AuthProve(sk, chalToken)
+		proofToken, err := AuthProve(sk, bit, chalToken)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,14 +92,12 @@ func BenchmarkChallenge(b *testing.B) {
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authToken := AuthTokenForKey(pk, authKey)
-
-	query := keydb.NewDoublyEncryptedQuery(pk, 1, 0)
+	authQuery, _ := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := AuthChalForQuery(secparam, keydb, query, authToken, 1)
+		_, err := AuthChalForQuery(secparam, keydb, authQuery, 1)
 
 		if err != nil {
 			panic(err)
@@ -114,15 +113,15 @@ func BenchmarkProve(b *testing.B) {
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authToken := AuthTokenForKey(pk, authKey)
+	authQuery, bit := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
 
-	query := keydb.NewDoublyEncryptedQuery(pk, 1, 0)
-	chalToken, _ := AuthChalForQuery(secparam, keydb, query, authToken, 1)
+	// issue challenge
+	chalToken, _ := AuthChalForQuery(secparam, keydb, authQuery, 1)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := AuthProve(sk, chalToken)
+		_, err := AuthProve(sk, bit, chalToken)
 
 		if err != nil {
 			panic(err)

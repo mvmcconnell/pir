@@ -2,6 +2,8 @@ package aspir
 
 import (
 	"errors"
+	"fmt"
+	"math/rand"
 
 	"github.com/sachaservan/pir"
 
@@ -13,69 +15,151 @@ import (
  Single-server AHE variant of ASPIR
 */
 
-// AuthToken is provided by the client to prove knowledge of the
-// access key associated with the retrieved item
-type AuthToken struct {
-	T *paillier.Ciphertext
+// AuthenticatedEncryptedQuery is a single-server encrypted query
+// attached with an authentication token that proves knowledge of a
+// secret associated with the retrieved item.
+// Either Query0 or Query1`is a "null" query that doesn't retrieve
+// any value. It is needed to prevent the server from generating
+// a ''tagged'' key database in an attempt to learn which item
+// is being retrieved by the client ...
+type AuthenticatedEncryptedQuery struct {
+	Query0     *pir.DoublyEncryptedQuery
+	Query1     *pir.DoublyEncryptedQuery
+	AuthToken0 *paillier.Ciphertext
+	AuthToken1 *paillier.Ciphertext
 }
 
 // ChalToken is the challenge issued to the client
 // in order to prove knowledge of the key associated with the retrieved item
 type ChalToken struct {
-	T        *paillier.Ciphertext
+	Token0   *paillier.Ciphertext
+	Token1   *paillier.Ciphertext
 	SecParam int
 }
 
 // ProofToken is the response provided by the client to a ChalToken
 type ProofToken struct {
-	T *paillier.Ciphertext
-	P *paillier.DDLEQProof
-	R *gmp.Int
-	S *gmp.Int
+	T    *paillier.Ciphertext
+	P    *paillier.DDLEQProof
+	QBit int
+	R    *gmp.Int
+	S    *gmp.Int
 }
 
-// AuthTokenForKey generates an auth token for a specific AuthKey (encoded as a slot)
-func AuthTokenForKey(pk *paillier.PublicKey, authKey *pir.Slot) *AuthToken {
-	authKeyInt := new(gmp.Int).SetBytes(authKey.Data)
-	authToken := &AuthToken{}
-	authToken.T = pk.Encrypt(authKeyInt)
+// GenerateAuthenticatedQuery generates an authenticated PIR query that can be verified by the server
+func GenerateAuthenticatedQuery(dbmd *pir.DBMetadata, pk *paillier.PublicKey, groupSize, index int, authKey *pir.Slot) (*AuthenticatedEncryptedQuery, int) {
 
-	return authToken
+	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
+	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
+
+	fakeToken := pk.EncryptZero()
+	realToken := pk.EncryptZero()
+
+	var query0 *pir.DoublyEncryptedQuery
+	var query1 *pir.DoublyEncryptedQuery
+	var token0 *paillier.Ciphertext
+	var token1 *paillier.Ciphertext
+
+	bit := rand.Intn(2)
+	if bit == 0 {
+		query0 = queryReal
+		token0 = realToken
+		query1 = queryFake
+		token1 = fakeToken
+	} else {
+		query0 = queryFake
+		token0 = fakeToken
+		query1 = queryReal
+		token1 = realToken
+	}
+
+	authQuery := &AuthenticatedEncryptedQuery{
+		Query0:     query0,
+		Query1:     query1,
+		AuthToken0: token0,
+		AuthToken1: token1,
+	}
+
+	return authQuery, bit
 }
 
 // AuthChalForQuery generates a challenge token for the provided PIR query
 func AuthChalForQuery(
 	secparam int,
 	keyDB *pir.Database,
-	query *pir.DoublyEncryptedQuery,
-	authToken *AuthToken,
+	query *AuthenticatedEncryptedQuery,
 	nprocs int) (*ChalToken, error) {
 
-	res, err := keyDB.PrivateDoublyEncryptedQuery(query, nprocs)
+	// get the row for query0
+	rowQueryRes0, err := keyDB.PrivateEncryptedQuery(query.Query0.Row, nprocs)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(res.Slots) != 1 || len(res.Slots[0].Cts) != 1 {
-		return nil, errors.New("Invalid challenge ciphertext result")
+	// get the row for query0
+	rowQueryRes1, err := keyDB.PrivateEncryptedQuery(query.Query1.Row, nprocs)
+	if err != nil {
+		return nil, err
 	}
 
-	chalTokenValue := query.Pk.NestedSub(res.Slots[0].Cts[0], authToken.T)
+	res0, err := keyDB.PrivateEncryptedQueryOverEncryptedResult(query.Query0.Col, rowQueryRes0, nprocs)
+	if err != nil {
+		return nil, err
+	}
 
-	return &ChalToken{chalTokenValue, secparam}, nil
+	res1, err := keyDB.PrivateEncryptedQueryOverEncryptedResult(query.Query1.Col, rowQueryRes1, nprocs)
+	if err != nil {
+		return nil, err
+	}
+
+	chalTokenValue0 := query.Query0.Row.Pk.NestedSub(res0.Slots[0].Cts[0], query.AuthToken0)
+	chalTokenValue1 := query.Query1.Row.Pk.NestedSub(res1.Slots[0].Cts[0], query.AuthToken1)
+
+	return &ChalToken{chalTokenValue0, chalTokenValue1, secparam}, nil
 }
 
 // AuthProve proves that challenge token is correct (a nested encryption of zero)
-func AuthProve(sk *paillier.SecretKey, chalToken *ChalToken) (*ProofToken, error) {
+// bit indicate which query (query0 or query1) is the real query
+func AuthProve(sk *paillier.SecretKey, bit int, chalToken *ChalToken) (*ProofToken, error) {
 
-	if sk.NestedDecrypt(chalToken.T).Cmp(gmp.NewInt(0)) != 0 {
-		panic("chal token is not zero")
+	zero := gmp.NewInt(0)
+	decTok0 := sk.NestedDecrypt(chalToken.Token0)
+	decTok1 := sk.NestedDecrypt(chalToken.Token1)
+
+	fmt.Printf("token0 %v\n", decTok0)
+	fmt.Printf("token1 %v\n", decTok1)
+
+	if decTok0.Cmp(zero) != 0 && decTok1.Cmp(zero) != 0 {
+		return nil, errors.New("both tokens non-zero -- server likely cheating")
 	}
 
-	ct1 := chalToken.T
-	ct2, a, b := sk.NestedRandomize(ct1)
+	var chal *paillier.Ciphertext
+	var queryBit = bit
 
-	proof, err := sk.ProveDDLEQ(chalToken.SecParam, ct1, ct2, a, b)
+	// if one of the tokens is non-zero then the server cheated
+	// therefore, we must prove whichever token is zero
+	// to avoid leaking information about the original query
+	if decTok0.Cmp(zero) != 0 || decTok1.Cmp(zero) != 0 {
+		if decTok0.Cmp(zero) == 0 {
+			chal = chalToken.Token0
+			queryBit = 0
+		} else {
+			chal = chalToken.Token1
+			queryBit = 1
+		}
+	} else {
+		if bit == 0 {
+			chal = chalToken.Token0
+			queryBit = 0
+		} else {
+			chal = chalToken.Token1
+			queryBit = 1
+		}
+	}
+
+	chal2, a, b := sk.NestedRandomize(chal)
+
+	proof, err := sk.ProveDDLEQ(chalToken.SecParam, chal, chal2, a, b)
 
 	if err != nil {
 		return nil, err
@@ -83,17 +167,23 @@ func AuthProve(sk *paillier.SecretKey, chalToken *ChalToken) (*ProofToken, error
 
 	// extract the randomness from the nested ciphertext
 	// to prove that ct2 is an encryption of zero
-	s := sk.ExtractRandonness(ct2)
-	ctInner := sk.DecryptNestedCiphertextLayer(ct2)
+	s := sk.ExtractRandonness(chal2)
+	ctInner := sk.DecryptNestedCiphertextLayer(chal2)
 	r := sk.ExtractRandonness(ctInner)
 
-	return &ProofToken{ct2, proof, r, s}, nil
+	return &ProofToken{chal2, proof, queryBit, r, s}, nil
 }
 
 // AuthCheck verifies the proof provided by the client and outputs True if and only if the proof is valid
 func AuthCheck(pk *paillier.PublicKey, chalToken *ChalToken, proofToken *ProofToken) bool {
 
-	ct1 := chalToken.T
+	var ct1 *paillier.Ciphertext
+	if proofToken.QBit == 0 {
+		ct1 = chalToken.Token0
+	} else {
+		ct1 = chalToken.Token1
+	}
+
 	ct2 := proofToken.T
 
 	// make sure that ct2 is a re-encryption of ct1
