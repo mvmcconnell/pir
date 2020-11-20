@@ -297,6 +297,34 @@ func BenchmarkQuerySecretSharesSingle8Thread(b *testing.B) {
 	}
 }
 
+func BenchmarkGenEncryptedQuery(b *testing.B) {
+	setup()
+
+	_, pk := paillier.KeyGen(1024)
+	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
+
+	b.ResetTimer()
+
+	// benchmark index build time
+	for i := 0; i < b.N; i++ {
+		db.NewEncryptedQuery(pk, 1, 0)
+	}
+}
+
+func BenchmarkGenDoublyEncryptedQuery(b *testing.B) {
+	setup()
+
+	_, pk := paillier.KeyGen(1024)
+	db := GenerateRandomDB(BenchmarkDBSize, SlotBytes)
+
+	b.ResetTimer()
+
+	// benchmark index build time
+	for i := 0; i < b.N; i++ {
+		db.NewDoublyEncryptedNullQuery(pk, 1)
+	}
+}
+
 func BenchmarkEncryptedQueryAHESingleThread(b *testing.B) {
 	setup()
 

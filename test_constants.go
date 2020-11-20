@@ -4,8 +4,8 @@ package pir
 const TestDBHeight = 1 << 5
 const TestDBSize = 1 << 10
 
-const BenchmarkDBHeight = 1 << 5
-const BenchmarkDBSize = 1 << 10
+const BenchmarkDBHeight = 1 << 10
+const BenchmarkDBSize = 1 << 20
 
 const MinGroupSize = 1
 const MaxGroupSize = 5
