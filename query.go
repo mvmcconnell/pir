@@ -154,13 +154,10 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, groupSiz
 // to select the row and column in the database that is viewed as a width x height grid
 func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.PublicKey, width, height, groupSize, index int) *DoublyEncryptedQuery {
 
-	var rowIndex int
-	var colIndex int
+	rowIndex, colIndex := dbmd.IndexToCoordinates(index, width, height)
 	if index == -1 {
 		rowIndex = -1
 		colIndex = -1
-	} else {
-		rowIndex, colIndex = dbmd.IndexToCoordinates(index, width, height)
 	}
 
 	row := make([]*paillier.Ciphertext, height)
@@ -249,18 +246,9 @@ func RecoverDoublyEncrypted(res *DoublyEncryptedQueryResult, sk *paillier.Secret
 	slots := make([]*Slot, len(res.Slots))
 
 	for i, slot := range res.Slots {
-		ciphertexts := make([]*paillier.Ciphertext, len(slot.Cts))
-		for j, ct := range slot.Cts {
-
-			// TODO: modify paillier to make this process cleaner
-			ctValue := sk.Decrypt(ct)
-			ct := &paillier.Ciphertext{C: ctValue, Level: paillier.EncLevelOne}
-			ciphertexts[j] = ct
-		}
-
-		arr := make([]*gmp.Int, len(ciphertexts))
-		for j, c := range ciphertexts {
-			arr[j] = sk.Decrypt(c)
+		arr := make([]*gmp.Int, len(slot.Cts))
+		for j, c := range slot.Cts {
+			arr[j] = sk.NestedDecrypt(c)
 		}
 
 		slot := NewSlotFromGmpIntArray(arr, res.SlotBytes, res.NumBytesPerCiphertext)

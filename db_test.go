@@ -112,6 +112,87 @@ func TestEncryptedQuery(t *testing.T) {
 	}
 }
 
+func TestEncryptedNullQuery(t *testing.T) {
+	setup()
+
+	sk, pk := paillier.KeyGen(128)
+
+	for slotBytes := 1; slotBytes < SlotBytes; slotBytes += SlotBytesStep {
+		db := GenerateRandomDB(TestDBSize, SlotBytes)
+
+		for groupSize := MinGroupSize; groupSize < MaxGroupSize; groupSize++ {
+
+			dimWidth, _ := db.GetDimentionsForDatabase(TestDBHeight, groupSize)
+
+			for i := 0; i < NumQueries; i++ {
+				qIndex := -1
+
+				query := db.NewEncryptedQuery(pk, groupSize, qIndex)
+
+				response, err := db.PrivateEncryptedQuery(query, NumProcsForQuery)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
+
+				res := RecoverEncrypted(response, sk)
+
+				if len(res)%groupSize != 0 {
+					t.Fatalf("Response size is not a multiple of DBGroupSize")
+				}
+
+				emptySlot := NewEmptySlot(len(res[0].Data))
+				for j := 0; j < dimWidth; j++ {
+
+					if !emptySlot.Equal(res[j]) {
+						t.Fatalf(
+							"Null query incorrect for group size %v. %v != %v\n",
+							groupSize,
+							emptySlot,
+							res[j],
+						)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestDoublyEncryptedNullQuery(t *testing.T) {
+	setup()
+
+	sk, pk := paillier.KeyGen(126)
+
+	for slotBytes := 1; slotBytes < SlotBytes; slotBytes += SlotBytesStep {
+		db := GenerateRandomDB(TestDBSize, SlotBytes)
+
+		for groupSize := MinGroupSize; groupSize < MaxGroupSize; groupSize++ {
+
+			for i := 0; i < NumQueries; i++ {
+
+				query := db.NewDoublyEncryptedNullQuery(pk, groupSize)
+				response, err := db.PrivateDoublyEncryptedQuery(query, NumProcsForQuery)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
+
+				res := RecoverDoublyEncrypted(response, sk)
+				emptySlot := NewEmptySlot(len(res[0].Data))
+
+				for col := 0; col < groupSize; col++ {
+
+					if !emptySlot.Equal(res[col]) {
+						t.Fatalf(
+							"Null query incorrect. %v != %v\n",
+							emptySlot,
+							res[col],
+						)
+					}
+				}
+			}
+		}
+	}
+}
+
 // run with 'go test -v -run TestDoublyEncryptedQuery' to see log outputs.
 func TestDoublyEncryptedQuery(t *testing.T) {
 	setup()

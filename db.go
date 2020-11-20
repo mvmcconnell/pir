@@ -5,6 +5,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
 	"github.com/sachaservan/pir/dpf"
 )
@@ -158,10 +159,6 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 	return &SecretSharedQueryResult{db.SlotBytes, results}, nil
 }
 
-func nullCiphertext(level paillier.EncryptionLevel) *paillier.Ciphertext {
-	return &paillier.Ciphertext{C: paillier.OneBigInt, Level: level}
-}
-
 // PrivateEncryptedQuery uses the provided PIR query to retreive a slot row (encrypted)
 // the tricky details are in regards to converting slot bytes to ciphertexts, specifically
 // the encryption scheme might not have a message space large enough to accomodate
@@ -207,7 +204,7 @@ func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*E
 				}
 
 				for j := range slotRes[i][col].Cts {
-					slotRes[i][col].Cts[j] = nullCiphertext(paillier.EncLevelOne)
+					slotRes[i][col].Cts[j] = nullCiphertext(query.Pk, paillier.EncLevelOne)
 				}
 			}
 
@@ -297,7 +294,7 @@ func (db *Database) PrivateEncryptedQueryOverEncryptedResult(query *EncryptedQue
 	for i := 0; i < query.GroupSize; i++ {
 		res[i] = make([]*paillier.Ciphertext, numCiphertextsPerSlot)
 		for j := 0; j < numCiphertextsPerSlot; j++ {
-			res[i][j] = nullCiphertext(paillier.EncLevelTwo)
+			res[i][j] = nullCiphertext(query.Pk, paillier.EncLevelTwo)
 		}
 	}
 
@@ -449,4 +446,8 @@ func addEncryptedSlots(pk *paillier.PublicKey, a, b *EncryptedSlot) {
 	for j := 0; j < len(b.Cts); j++ {
 		a.Cts[j] = pk.Add(a.Cts[j], b.Cts[j])
 	}
+}
+
+func nullCiphertext(pk *paillier.PublicKey, level paillier.EncryptionLevel) *paillier.Ciphertext {
+	return pk.EncryptWithRAtLevel(gmp.NewInt(0), gmp.NewInt(1), level)
 }
