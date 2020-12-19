@@ -29,7 +29,7 @@ func TestASPIR(t *testing.T) {
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[qIndex]
-		authQuery, bit, token0, token1 := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, qIndex, authKey)
+		authQuery, state := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, qIndex, authKey)
 
 		// issue challenge
 		chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
@@ -38,7 +38,7 @@ func TestASPIR(t *testing.T) {
 		}
 
 		// generate proof
-		proofToken, err := AuthProve(sk, token0, token1, bit, chalToken)
+		proofToken, err := AuthProve(sk, state, chalToken)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,7 +89,7 @@ func BenchmarkChallenge(b *testing.B) {
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, _, _, _ := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
+	authQuery, _ := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
 
 	b.ResetTimer()
 
@@ -110,7 +110,7 @@ func BenchmarkProve(b *testing.B) {
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, bit, token0, token1 := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
+	authQuery, state := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
 
 	// issue challenge
 	chalToken, _ := AuthChalForQuery(secparam, keydb, authQuery, 1)
@@ -118,7 +118,7 @@ func BenchmarkProve(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := AuthProve(sk, token0, token1, bit, chalToken)
+		_, err := AuthProve(sk, state, chalToken)
 
 		if err != nil {
 			panic(err)

@@ -27,6 +27,13 @@ type AuthenticatedEncryptedQuery struct {
 	AuthTokenComm1 *ROCommitment
 }
 
+// AuthQueryPrivateState the client's private state
+type AuthQueryPrivateState struct {
+	Bit        int
+	AuthToken0 *paillier.Ciphertext
+	AuthToken1 *paillier.Ciphertext
+}
+
 // ChalToken is the challenge issued to the client
 // in order to prove knowledge of the key associated with the retrieved item
 type ChalToken struct {
@@ -50,7 +57,7 @@ func GenerateAuthenticatedQuery(
 	dbmd *pir.DBMetadata,
 	pk *paillier.PublicKey,
 	groupSize, index int,
-	authKey *pir.Slot) (*AuthenticatedEncryptedQuery, int, *paillier.Ciphertext, *paillier.Ciphertext) {
+	authKey *pir.Slot) (*AuthenticatedEncryptedQuery, *AuthQueryPrivateState) {
 
 	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
 	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
@@ -86,7 +93,13 @@ func GenerateAuthenticatedQuery(
 		AuthTokenComm1: authTokenComm1,
 	}
 
-	return authQuery, bit, token0, token1
+	state := &AuthQueryPrivateState{
+		Bit:        bit,
+		AuthToken0: token0,
+		AuthToken1: token1,
+	}
+
+	return authQuery, state
 }
 
 // AuthChalForQuery generates a challenge token for the provided PIR query
@@ -123,11 +136,11 @@ func AuthChalForQuery(
 
 // AuthProve proves that challenge token is correct (a nested encryption of zero)
 // bit indicate which query (query0 or query1) is the real query
-func AuthProve(sk *paillier.SecretKey, authToken0, authToken1 *paillier.Ciphertext, bit int, chalToken *ChalToken) (*ProofToken, error) {
+func AuthProve(sk *paillier.SecretKey, state *AuthQueryPrivateState, chalToken *ChalToken) (*ProofToken, error) {
 
 	var selToken *paillier.Ciphertext
-	token0 := sk.NestedSub(chalToken.Token0, authToken0)
-	token1 := sk.NestedSub(chalToken.Token1, authToken1)
+	token0 := sk.NestedSub(chalToken.Token0, state.AuthToken0)
+	token1 := sk.NestedSub(chalToken.Token1, state.AuthToken1)
 
 	zero := gmp.NewInt(0)
 	decTok0 := sk.NestedDecrypt(token0)
@@ -138,7 +151,7 @@ func AuthProve(sk *paillier.SecretKey, authToken0, authToken1 *paillier.Cipherte
 	}
 
 	var chal *paillier.Ciphertext
-	var queryBit = bit
+	var queryBit = state.Bit
 
 	// if one of the tokens is non-zero then the server cheated
 	// therefore, we must prove whichever token is zero
@@ -146,21 +159,21 @@ func AuthProve(sk *paillier.SecretKey, authToken0, authToken1 *paillier.Cipherte
 	if decTok0.Cmp(zero) != 0 || decTok1.Cmp(zero) != 0 {
 		if decTok0.Cmp(zero) == 0 {
 			chal = token0
-			selToken = authToken0
+			selToken = state.AuthToken0
 			queryBit = 0
 		} else {
 			chal = token1
-			selToken = authToken1
+			selToken = state.AuthToken1
 			queryBit = 1
 		}
 	} else {
-		if bit == 0 {
+		if state.Bit == 0 {
 			chal = token0
-			selToken = authToken0
+			selToken = state.AuthToken0
 			queryBit = 0
 		} else {
 			chal = token1
-			selToken = authToken1
+			selToken = state.AuthToken1
 			queryBit = 1
 		}
 	}
