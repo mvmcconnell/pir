@@ -1,19 +1,11 @@
-package aspir
+package pir
 
 import (
 	"math/rand"
 	"testing"
 
 	"github.com/sachaservan/paillier"
-	"github.com/sachaservan/pir"
 )
-
-const StatisticalSecurityParam = 32 // 32 bits of stat sec
-const TestDBHeight = 1 << 5
-const TestDBSize = 1 << 10
-const NumQueries = 50 // number of queries to run
-const BenchmarkDBHeight = 1 << 5
-const BenchmarkDBSize = 1 << 10
 
 // run with 'go test -v -run TestASPIR' to see log outputs.
 func TestASPIR(t *testing.T) {
@@ -22,14 +14,14 @@ func TestASPIR(t *testing.T) {
 
 	sk, pk := paillier.KeyGen(128)
 
-	keydb := pir.GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
 		qIndex := rand.Intn(keydb.DBSize)
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[qIndex]
-		authQuery, state := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, qIndex, authKey)
+		authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(pk, 1, qIndex, authKey)
 
 		// issue challenge
 		chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
@@ -57,7 +49,7 @@ func TestSharedASPIR(t *testing.T) {
 
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
-	keydb := pir.GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
 		index := rand.Intn(TestDBSize)
@@ -85,11 +77,11 @@ func BenchmarkChallenge(b *testing.B) {
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
 	_, pk := paillier.KeyGen(1024)
-	keydb := pir.GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
+	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, _ := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
+	authQuery, _ := keydb.DBMetadata.NewAuthenticatedQuery(pk, 1, 0, authKey)
 
 	b.ResetTimer()
 
@@ -106,11 +98,11 @@ func BenchmarkProve(b *testing.B) {
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
 	sk, pk := paillier.KeyGen(1024)
-	keydb := pir.GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
+	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, state := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
+	authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(pk, 1, 0, authKey)
 
 	// issue challenge
 	chalToken, _ := AuthChalForQuery(secparam, keydb, authQuery, 1)

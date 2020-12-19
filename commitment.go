@@ -1,4 +1,4 @@
-package aspir
+package pir
 
 import (
 	"bytes"

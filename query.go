@@ -2,6 +2,7 @@ package pir
 
 import (
 	"math"
+	"math/rand"
 
 	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
@@ -109,6 +110,55 @@ func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, groupSize, ind
 	width, height = dbmd.GetDimentionsForDatabase(height, groupSize)
 
 	return dbmd.NewEncryptedQueryWithDimentions(pk, width, height, groupSize, index)
+}
+
+// NewAuthenticatedQuery generates an authenticated PIR query that can be verified by the server
+func (dbmd *DBMetadata) NewAuthenticatedQuery(
+	pk *paillier.PublicKey,
+	groupSize, index int,
+	authKey *Slot) (*AuthenticatedEncryptedQuery, *AuthQueryPrivateState) {
+
+	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
+	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
+
+	fakeToken := pk.EncryptZero()
+	realToken := pk.EncryptZero()
+
+	var query0 *DoublyEncryptedQuery
+	var query1 *DoublyEncryptedQuery
+	var token0 *paillier.Ciphertext
+	var token1 *paillier.Ciphertext
+
+	bit := rand.Intn(2)
+	if bit == 0 {
+		query0 = queryReal
+		token0 = realToken
+		query1 = queryFake
+		token1 = fakeToken
+	} else {
+		query0 = queryFake
+		token0 = fakeToken
+		query1 = queryReal
+		token1 = realToken
+	}
+
+	authTokenComm0 := Commit(token0.C)
+	authTokenComm1 := Commit(token1.C)
+
+	authQuery := &AuthenticatedEncryptedQuery{
+		Query0:         query0,
+		Query1:         query1,
+		AuthTokenComm0: authTokenComm0,
+		AuthTokenComm1: authTokenComm1,
+	}
+
+	state := &AuthQueryPrivateState{
+		Bit:        bit,
+		AuthToken0: token0,
+		AuthToken1: token1,
+	}
+
+	return authQuery, state
 }
 
 // NewEncryptedQueryWithDimentions generates a new encrypted point function that acts as a PIR query

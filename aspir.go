@@ -1,12 +1,10 @@
-package aspir
+package pir
 
 import (
 	"errors"
-	"math/rand"
 
 	"github.com/ncw/gmp"
 	"github.com/sachaservan/paillier"
-	"github.com/sachaservan/pir"
 )
 
 /*
@@ -21,8 +19,8 @@ import (
 // a ''tagged'' key database in an attempt to learn which item
 // is being retrieved by the client ...
 type AuthenticatedEncryptedQuery struct {
-	Query0         *pir.DoublyEncryptedQuery
-	Query1         *pir.DoublyEncryptedQuery
+	Query0         *DoublyEncryptedQuery
+	Query1         *DoublyEncryptedQuery
 	AuthTokenComm0 *ROCommitment
 	AuthTokenComm1 *ROCommitment
 }
@@ -52,60 +50,10 @@ type ProofToken struct {
 	S         *gmp.Int
 }
 
-// GenerateAuthenticatedQuery generates an authenticated PIR query that can be verified by the server
-func GenerateAuthenticatedQuery(
-	dbmd *pir.DBMetadata,
-	pk *paillier.PublicKey,
-	groupSize, index int,
-	authKey *pir.Slot) (*AuthenticatedEncryptedQuery, *AuthQueryPrivateState) {
-
-	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
-	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
-
-	fakeToken := pk.EncryptZero()
-	realToken := pk.EncryptZero()
-
-	var query0 *pir.DoublyEncryptedQuery
-	var query1 *pir.DoublyEncryptedQuery
-	var token0 *paillier.Ciphertext
-	var token1 *paillier.Ciphertext
-
-	bit := rand.Intn(2)
-	if bit == 0 {
-		query0 = queryReal
-		token0 = realToken
-		query1 = queryFake
-		token1 = fakeToken
-	} else {
-		query0 = queryFake
-		token0 = fakeToken
-		query1 = queryReal
-		token1 = realToken
-	}
-
-	authTokenComm0 := Commit(token0.C)
-	authTokenComm1 := Commit(token1.C)
-
-	authQuery := &AuthenticatedEncryptedQuery{
-		Query0:         query0,
-		Query1:         query1,
-		AuthTokenComm0: authTokenComm0,
-		AuthTokenComm1: authTokenComm1,
-	}
-
-	state := &AuthQueryPrivateState{
-		Bit:        bit,
-		AuthToken0: token0,
-		AuthToken1: token1,
-	}
-
-	return authQuery, state
-}
-
 // AuthChalForQuery generates a challenge token for the provided PIR query
 func AuthChalForQuery(
 	secparam int,
-	keyDB *pir.Database,
+	keyDB *Database,
 	query *AuthenticatedEncryptedQuery,
 	nprocs int) (*ChalToken, error) {
 
@@ -240,28 +188,28 @@ func AuthCheck(pk *paillier.PublicKey, query *AuthenticatedEncryptedQuery, chalT
 // AuditTokenShare is a secret share of an audit token
 // used to authenticate two-server PIR queries
 type AuditTokenShare struct {
-	T *pir.Slot
+	T *Slot
 }
 
 // AuthTokenShare is a share of the key associated with the queried item
 type AuthTokenShare struct {
-	T *pir.Slot
+	T *Slot
 }
 
 // AuthTokenSharesForKey generates auth token shares for a specific AuthKey (encoded as a slot)
-func AuthTokenSharesForKey(authKey *pir.Slot, numShares int) []*AuthTokenShare {
+func AuthTokenSharesForKey(authKey *Slot, numShares int) []*AuthTokenShare {
 
 	numBytes := len(authKey.Data)
 	shares := make([]*AuthTokenShare, numShares)
-	accumulator := pir.NewEmptySlot(numBytes)
+	accumulator := NewEmptySlot(numBytes)
 
 	for i := 1; i < numShares; i++ {
-		share := pir.NewRandomSlot(numBytes)
-		pir.XorSlots(accumulator, share)
+		share := NewRandomSlot(numBytes)
+		XorSlots(accumulator, share)
 		shares[i] = &AuthTokenShare{share}
 	}
 
-	pir.XorSlots(accumulator, authKey)
+	XorSlots(accumulator, authKey)
 	shares[0] = &AuthTokenShare{accumulator}
 
 	return shares
@@ -269,8 +217,8 @@ func AuthTokenSharesForKey(authKey *pir.Slot, numShares int) []*AuthTokenShare {
 
 // GenerateAuditForSharedQuery generates an audit share that is sent to the other server(s)
 func GenerateAuditForSharedQuery(
-	keyDB *pir.Database,
-	query *pir.QueryShare,
+	keyDB *Database,
+	query *QueryShare,
 	authToken *AuthTokenShare,
 	nprocs int) (*AuditTokenShare, error) {
 
@@ -284,16 +232,16 @@ func GenerateAuditForSharedQuery(
 	}
 
 	keySlotShare := res.Shares[0]
-	pir.XorSlots(keySlotShare, authToken.T)
+	XorSlots(keySlotShare, authToken.T)
 	return &AuditTokenShare{keySlotShare}, nil
 }
 
 // CheckAudit outputs True of all provided audit tokens xor to zero
 func CheckAudit(auditTokens ...*AuditTokenShare) bool {
 
-	res := pir.NewEmptySlot(len(auditTokens[0].T.Data))
+	res := NewEmptySlot(len(auditTokens[0].T.Data))
 	for _, tok := range auditTokens {
-		pir.XorSlots(res, tok.T)
+		XorSlots(res, tok.T)
 	}
 
 	// make sure the resulting slot is all zero
