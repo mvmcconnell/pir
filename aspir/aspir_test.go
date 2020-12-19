@@ -1,7 +1,6 @@
 package aspir
 
 import (
-	"fmt"
 	"math/rand"
 	"testing"
 
@@ -30,7 +29,7 @@ func TestASPIR(t *testing.T) {
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[qIndex]
-		authQuery, bit := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, qIndex, authKey)
+		authQuery, bit, token0, token1 := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, qIndex, authKey)
 
 		// issue challenge
 		chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
@@ -38,16 +37,14 @@ func TestASPIR(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		fmt.Printf("chalbit = %v\n", bit)
-
 		// generate proof
-		proofToken, err := AuthProve(sk, bit, chalToken)
+		proofToken, err := AuthProve(sk, token0, token1, bit, chalToken)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// generate proof
-		ok := AuthCheck(pk, chalToken, proofToken)
+		ok := AuthCheck(pk, authQuery, chalToken, proofToken)
 		if !ok {
 			t.Fatalf("ASPIR proof failed")
 		}
@@ -92,7 +89,7 @@ func BenchmarkChallenge(b *testing.B) {
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, _ := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
+	authQuery, _, _, _ := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
 
 	b.ResetTimer()
 
@@ -113,7 +110,7 @@ func BenchmarkProve(b *testing.B) {
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, bit := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
+	authQuery, bit, token0, token1 := GenerateAuthenticatedQuery(&keydb.DBMetadata, pk, 1, 0, authKey)
 
 	// issue challenge
 	chalToken, _ := AuthChalForQuery(secparam, keydb, authQuery, 1)
@@ -121,7 +118,7 @@ func BenchmarkProve(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := AuthProve(sk, bit, chalToken)
+		_, err := AuthProve(sk, token0, token1, bit, chalToken)
 
 		if err != nil {
 			panic(err)
