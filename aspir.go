@@ -27,6 +27,7 @@ type AuthenticatedEncryptedQuery struct {
 
 // AuthQueryPrivateState the client's private state
 type AuthQueryPrivateState struct {
+	Sk         *paillier.SecretKey
 	Bit        int
 	AuthToken0 *paillier.Ciphertext
 	AuthToken1 *paillier.Ciphertext
@@ -84,7 +85,9 @@ func AuthChalForQuery(
 
 // AuthProve proves that challenge token is correct (a nested encryption of zero)
 // bit indicate which query (query0 or query1) is the real query
-func AuthProve(sk *paillier.SecretKey, state *AuthQueryPrivateState, chalToken *ChalToken) (*ProofToken, error) {
+func AuthProve(state *AuthQueryPrivateState, chalToken *ChalToken) (*ProofToken, error) {
+
+	sk := state.Sk
 
 	var selToken *paillier.Ciphertext
 	token0 := sk.NestedSub(chalToken.Token0, state.AuthToken0)

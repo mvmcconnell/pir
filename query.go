@@ -114,9 +114,11 @@ func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, groupSize, ind
 
 // NewAuthenticatedQuery generates an authenticated PIR query that can be verified by the server
 func (dbmd *DBMetadata) NewAuthenticatedQuery(
-	pk *paillier.PublicKey,
+	sk *paillier.SecretKey,
 	groupSize, index int,
 	authKey *Slot) (*AuthenticatedEncryptedQuery, *AuthQueryPrivateState) {
+
+	pk := &sk.PublicKey
 
 	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
 	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
@@ -153,6 +155,7 @@ func (dbmd *DBMetadata) NewAuthenticatedQuery(
 	}
 
 	state := &AuthQueryPrivateState{
+		Sk:         sk,
 		Bit:        bit,
 		AuthToken0: token0,
 		AuthToken1: token1,

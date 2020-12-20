@@ -21,7 +21,7 @@ func TestASPIR(t *testing.T) {
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[qIndex]
-		authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(pk, 1, qIndex, authKey)
+		authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(sk, 1, qIndex, authKey)
 
 		// issue challenge
 		chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
@@ -30,7 +30,7 @@ func TestASPIR(t *testing.T) {
 		}
 
 		// generate proof
-		proofToken, err := AuthProve(sk, state, chalToken)
+		proofToken, err := AuthProve(state, chalToken)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -76,12 +76,12 @@ func TestSharedASPIR(t *testing.T) {
 func BenchmarkChallenge(b *testing.B) {
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
-	_, pk := paillier.KeyGen(1024)
+	sk, _ := paillier.KeyGen(1024)
 	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, _ := keydb.DBMetadata.NewAuthenticatedQuery(pk, 1, 0, authKey)
+	authQuery, _ := keydb.DBMetadata.NewAuthenticatedQuery(sk, 1, 0, authKey)
 
 	b.ResetTimer()
 
@@ -97,12 +97,12 @@ func BenchmarkChallenge(b *testing.B) {
 func BenchmarkProve(b *testing.B) {
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
 
-	sk, pk := paillier.KeyGen(1024)
+	sk, _ := paillier.KeyGen(1024)
 	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
-	authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(pk, 1, 0, authKey)
+	authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(sk, 1, 0, authKey)
 
 	// issue challenge
 	chalToken, _ := AuthChalForQuery(secparam, keydb, authQuery, 1)
@@ -110,7 +110,7 @@ func BenchmarkProve(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := AuthProve(sk, state, chalToken)
+		_, err := AuthProve(state, chalToken)
 
 		if err != nil {
 			panic(err)
