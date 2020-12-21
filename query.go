@@ -120,7 +120,7 @@ func (dbmd *DBMetadata) NewAuthenticatedQuery(
 
 	pk := &sk.PublicKey
 
-	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
+	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, index)
 	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
 
 	fakeToken := pk.EncryptZero()
