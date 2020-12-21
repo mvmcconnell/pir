@@ -410,7 +410,7 @@ func (dbmd *DBMetadata) GetDimentionsForDatabaseWidthMultiple(height int, groupS
 	}
 
 	// trim the height to fit the database without extra rows
-	dimHeight = int(math.Ceil(float64(dbmd.DBSize / dimWidth)))
+	dimHeight = int(math.Ceil(float64(dbmd.DBSize / (dimWidth * groupSize))))
 
 	return dimWidth, dimHeight
 }
