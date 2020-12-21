@@ -196,7 +196,7 @@ func (dbmd *DBMetadata) NewDoublyEncryptedNullQuery(pk *paillier.PublicKey, grou
 func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, groupSize, index int) *DoublyEncryptedQuery {
 
 	// compute sqrt dimentions
-	height := int(math.Ceil(math.Sqrt(float64(dbmd.DBSize))))
+	height := int(math.Ceil(math.Sqrt(float64(dbmd.DBSize / groupSize))))
 	var width int
 	width, height = dbmd.GetDimentionsForDatabase(height, groupSize)
 

@@ -395,7 +395,7 @@ func (dbmd *DBMetadata) GetDimentionsForDatabase(height int, groupSize int) (int
 // GetDimentionsForDatabaseWidthMultiple returns width and height for the database such that
 // widthMultiple is a multiple of the width value
 func (dbmd *DBMetadata) GetDimentionsForDatabaseWidthMultiple(height int, groupSize int, widthMultiple int) (int, int) {
-	dimWidth := int(math.Ceil(float64(dbmd.DBSize / height)))
+	dimWidth := int(math.Ceil(float64(dbmd.DBSize / (height * groupSize))))
 
 	// make the dimWidth a multiple of groupSize
 	if dimWidth%groupSize != 0 {
