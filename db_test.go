@@ -206,7 +206,9 @@ func TestDoublyEncryptedQuery(t *testing.T) {
 
 			dimWidth, dimHeight := db.GetDimentionsForDatabase(TestDBHeight, groupSize)
 
-			if dimWidth*groupSize*dimHeight > db.DBSize {
+			// make sure the database width and height are not ridiculous
+			// (allow for up to 1 extra row)
+			if dimWidth*groupSize*dimHeight > db.DBSize+dimWidth*groupSize {
 				t.Fatalf(
 					"Dimensions are incorrect. width = %v  heigh = %v group size = %v  (%v > %v)\n",
 					dimWidth,
