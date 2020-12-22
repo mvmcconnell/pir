@@ -58,6 +58,11 @@ func AuthChalForQuery(
 	query *AuthenticatedEncryptedQuery,
 	nprocs int) (*ChalToken, error) {
 
+	// hack: because ASPIR has group size 1, need to make sure that query is  only retrieving one key
+	groupSize := query.Query0.Col.GroupSize
+	query.Query0.Col.GroupSize = 1
+	query.Query1.Col.GroupSize = 1
+
 	// get the row for query0
 	rowQueryRes0, err := keyDB.PrivateEncryptedQuery(query.Query0.Row, nprocs)
 	if err != nil {
@@ -79,6 +84,9 @@ func AuthChalForQuery(
 	if err != nil {
 		return nil, err
 	}
+
+	query.Query0.Col.GroupSize = groupSize
+	query.Query1.Col.GroupSize = groupSize
 
 	return &ChalToken{res0.Slots[0].Cts[0], res1.Slots[0].Cts[0], secparam}, nil
 }

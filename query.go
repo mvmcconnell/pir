@@ -123,8 +123,10 @@ func (dbmd *DBMetadata) NewAuthenticatedQuery(
 	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, index)
 	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
 
+	// TODO: have a better way of converting authKey to an encryptable type
+	// since it *has* to match the format used when processing queries
+	realToken := pk.Encrypt(new(gmp.Int).SetBytes(authKey.Data))
 	fakeToken := pk.EncryptZero()
-	realToken := pk.EncryptZero()
 
 	var query0 *DoublyEncryptedQuery
 	var query1 *DoublyEncryptedQuery
