@@ -10,19 +10,19 @@ import (
 
 // run with 'go test -v -run TestASPIR' to see log outputs.
 func TestASPIR(t *testing.T) {
-	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
+	secbytes := StatisticalSecurityBytes // statistical secuirity parameter for proof soundness
 	nprocs := 1
 
 	sk, pk := paillier.KeyGen(128)
 
-	db := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+	db := GenerateRandomDB(TestDBSize, secbytes) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
 
 		for groupSize := MinGroupSize; groupSize < MaxGroupSize; groupSize++ {
 
 			keydbSize := int(math.Ceil(float64(TestDBSize / groupSize)))
-			keydb := GenerateRandomDB(keydbSize, int(secparam/4)) // get secparam in bytes
+			keydb := GenerateRandomDB(keydbSize, secbytes) // get secparam in bytes
 			qIndex := rand.Intn(keydb.DBSize)
 
 			// generate auth token consisiting of double encryption of the key
@@ -33,7 +33,7 @@ func TestASPIR(t *testing.T) {
 			t.Logf("authToken1 = %v\n", sk.Decrypt(state.AuthToken1))
 
 			// issue challenge
-			chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
+			chalToken, err := AuthChalForQuery(secbytes, keydb, authQuery, nprocs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -59,9 +59,9 @@ func TestASPIR(t *testing.T) {
 // run with 'go test -v -run TestSharedASPIRCompleteness' to see log outputs.
 func TestSharedASPIRCompleteness(t *testing.T) {
 
-	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
+	secbytes := StatisticalSecurityBytes // statistical secuirity parameter for proof soundness
 
-	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+	keydb := GenerateRandomDB(TestDBSize, secbytes) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
 		index := rand.Intn(TestDBSize)
@@ -87,9 +87,9 @@ func TestSharedASPIRCompleteness(t *testing.T) {
 // run with 'go test -v -run TestSharedASPIRSoundness' to see log outputs.
 func TestSharedASPIRSoundness(t *testing.T) {
 
-	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
+	secbytes := StatisticalSecurityBytes // statistical secuirity parameter for proof soundness
 
-	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+	keydb := GenerateRandomDB(TestDBSize, secbytes) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
 		index := rand.Intn(TestDBSize-1) + 1
@@ -113,10 +113,10 @@ func TestSharedASPIRSoundness(t *testing.T) {
 }
 
 func BenchmarkChallenge(b *testing.B) {
-	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
+	secbytes := StatisticalSecurityBytes // statistical secuirity parameter for proof soundness
 
 	sk, _ := paillier.KeyGen(1024)
-	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
+	keydb := GenerateRandomDB(BenchmarkDBSize, secbytes)
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
@@ -125,7 +125,7 @@ func BenchmarkChallenge(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := AuthChalForQuery(secparam, keydb, authQuery, 1)
+		_, err := AuthChalForQuery(secbytes, keydb, authQuery, 1)
 
 		if err != nil {
 			panic(err)
@@ -134,17 +134,17 @@ func BenchmarkChallenge(b *testing.B) {
 }
 
 func BenchmarkProve(b *testing.B) {
-	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
+	secbytes := StatisticalSecurityBytes // statistical secuirity parameter for proof soundness
 
 	sk, _ := paillier.KeyGen(1024)
-	keydb := GenerateRandomDB(BenchmarkDBSize, int(secparam/4))
+	keydb := GenerateRandomDB(BenchmarkDBSize, secbytes)
 
 	// generate auth token consisiting of double encryption of the key
 	authKey := keydb.Slots[0]
 	authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(sk, 1, 0, authKey)
 
 	// issue challenge
-	chalToken, _ := AuthChalForQuery(secparam, keydb, authQuery, 1)
+	chalToken, _ := AuthChalForQuery(secbytes, keydb, authQuery, 1)
 
 	b.ResetTimer()
 
