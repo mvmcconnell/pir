@@ -166,7 +166,8 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 func (db *Database) PrivateEncryptedQuery(query *EncryptedQuery, nprocs int) (*EncryptedQueryResult, error) {
 
 	// width of databse given query.height
-	dimWidth, dimHeight := query.DBWidth, query.DBHeight
+	dimWidth := query.DBWidth
+	dimHeight := query.DBHeight
 
 	// how many ciphertexts are needed to represent a slot
 	msgSpaceBytes := float64(len(query.Pk.N.Bytes()) - 2)
@@ -389,34 +390,19 @@ func (dbmd *DBMetadata) IndexToCoordinates(index, width, height int) (int, int) 
 // height is the desired height of the database (number of rows)
 // groupSize is the number of *adjacent* slots needed to constitute a "group" (default = 1)
 func (dbmd *DBMetadata) GetDimentionsForDatabase(height int, groupSize int) (int, int) {
-	return dbmd.GetDimentionsForDatabaseWidthMultiple(height, groupSize, 1)
-}
 
-// GetDimentionsForDatabaseWidthMultiple returns width and height for the database such that
-// widthMultiple is a multiple of the width value
-func (dbmd *DBMetadata) GetDimentionsForDatabaseWidthMultiple(height int, groupSize int, widthMultiple int) (int, int) {
 	dimWidth := int(math.Ceil(float64(dbmd.DBSize / (height * groupSize))))
 
 	if dimWidth == 0 {
 		dimWidth = 1
 	}
 
-	// make the dimWidth a multiple of groupSize
-	if dimWidth%groupSize != 0 {
-		dimWidth += groupSize - dimWidth%groupSize // next multiple
-	}
-
 	dimHeight := height
 
-	// make sure the width is a multiple of widthMultiple
-	if widthMultiple > 0 && dimWidth%widthMultiple != 0 {
-		dimWidth += widthMultiple - dimWidth%widthMultiple // next multiple
-	}
-
 	// trim the height to fit the database without extra rows
-	dimHeight = int(math.Ceil(float64(dbmd.DBSize/(dimWidth*groupSize))) + 1)
+	dimHeight = int(math.Ceil(float64(dbmd.DBSize / (dimWidth * groupSize))))
 
-	return dimWidth, dimHeight
+	return dimWidth * groupSize, dimHeight
 }
 
 // GetSqrtOfDBSize returns sqrt(DBSize) + 1

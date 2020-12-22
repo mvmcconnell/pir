@@ -208,21 +208,32 @@ func TestDoublyEncryptedQuery(t *testing.T) {
 
 			// make sure the database width and height are not ridiculous
 			// (allow for up to 1 extra row)
-			if dimWidth*groupSize*dimHeight > db.DBSize+dimWidth*groupSize {
+			if dimWidth*dimHeight > db.DBSize+dimWidth {
 				t.Fatalf(
 					"Dimensions are incorrect. width = %v  heigh = %v group size = %v  (%v > %v)\n",
 					dimWidth,
 					dimHeight,
 					groupSize,
-					dimWidth*groupSize*dimHeight,
+					dimWidth*dimHeight,
 					db.DBSize,
 				)
 			}
 
 			for i := 0; i < NumQueries; i++ {
-				qIndex := rand.Intn(dimWidth * dimHeight)
+
+				// select a random group
+				qIndex := int(rand.Intn(dimWidth*dimHeight) / groupSize)
 
 				query := db.NewDoublyEncryptedQuery(pk, groupSize, qIndex)
+
+				if len(query.Col.EBits) > (dimWidth / groupSize) {
+					t.Fatalf(
+						"Query consists of %v encrypted bits for a db width of %v\n",
+						len(query.Col.EBits),
+						(query.Col.DBWidth / groupSize),
+					)
+				}
+
 				response, err := db.PrivateDoublyEncryptedQuery(query, NumProcsForQuery)
 				if err != nil {
 					t.Fatalf("%v", err)
@@ -230,18 +241,21 @@ func TestDoublyEncryptedQuery(t *testing.T) {
 
 				res := RecoverDoublyEncrypted(response, sk)
 
-				for col := 0; col < groupSize; col++ {
+				rowIndex, colIndex := db.IndexToCoordinates(qIndex, dimWidth, dimHeight)
+				colIndex = int(colIndex / groupSize)
 
-					index := qIndex*groupSize + col
+				for j := 0; j < groupSize; j++ {
+
+					index := rowIndex*dimWidth + colIndex*groupSize + j
 					if index >= db.DBSize {
 						break
 					}
 
-					if !db.Slots[index].Equal(res[col]) {
+					if !db.Slots[index].Equal(res[j]) {
 						t.Fatalf(
 							"Query result is incorrect. %v != %v\n",
 							db.Slots[index],
-							res[col],
+							res[j],
 						)
 					}
 				}

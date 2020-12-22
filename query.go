@@ -210,6 +210,8 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQuery(pk *paillier.PublicKey, groupSiz
 func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.PublicKey, width, height, groupSize, index int) *DoublyEncryptedQuery {
 
 	rowIndex, colIndex := dbmd.IndexToCoordinates(index, width, height)
+	colIndex = int(colIndex / groupSize)
+
 	if index == -1 {
 		rowIndex = -1
 		colIndex = -1
@@ -224,8 +226,10 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.Publi
 		}
 	}
 
-	col := make([]*paillier.Ciphertext, width)
-	for i := 0; i < width; i++ {
+	groupedWidth := width / groupSize
+
+	col := make([]*paillier.Ciphertext, groupedWidth)
+	for i := 0; i < groupedWidth; i++ {
 		if i == colIndex {
 			col[i] = pk.EncryptOneAtLevel(paillier.EncLevelTwo)
 		} else {
@@ -236,8 +240,8 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.Publi
 	rowQuery := &EncryptedQuery{
 		Pk:        pk,
 		EBits:     row,
-		GroupSize: 1,
-		DBWidth:   width * groupSize,
+		GroupSize: groupSize,
+		DBWidth:   width,
 		DBHeight:  height,
 	}
 
@@ -246,7 +250,7 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.Publi
 		EBits:     col,
 		GroupSize: groupSize,
 		DBWidth:   width,
-		DBHeight:  height,
+		DBHeight:  1,
 	}
 
 	return &DoublyEncryptedQuery{
