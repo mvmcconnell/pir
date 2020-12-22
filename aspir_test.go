@@ -1,6 +1,7 @@
 package pir
 
 import (
+	"math"
 	"math/rand"
 	"testing"
 
@@ -14,43 +15,48 @@ func TestASPIR(t *testing.T) {
 
 	sk, pk := paillier.KeyGen(128)
 
-	keydb := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
+	db := GenerateRandomDB(TestDBSize, int(secparam/4)) // get secparam in bytes
 
 	for i := 0; i < NumQueries; i++ {
-		qIndex := rand.Intn(keydb.DBSize)
 
-		// generate auth token consisiting of double encryption of the key
-		authKey := keydb.Slots[qIndex]
-		authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(sk, 1, qIndex, authKey)
+		for groupSize := MinGroupSize; groupSize < MaxGroupSize; groupSize++ {
 
-		t.Logf("authToken0 = %v\n", sk.Decrypt(state.AuthToken0))
-		t.Logf("authToken1 = %v\n", sk.Decrypt(state.AuthToken1))
+			keydbSize := int(math.Ceil(float64(TestDBSize / groupSize)))
+			keydb := GenerateRandomDB(keydbSize, int(secparam/4)) // get secparam in bytes
+			qIndex := rand.Intn(keydb.DBSize)
 
-		// issue challenge
-		chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
-		if err != nil {
-			t.Fatal(err)
+			// generate auth token consisiting of double encryption of the key
+			authKey := keydb.Slots[qIndex]
+			authQuery, state := db.NewAuthenticatedQuery(sk, groupSize, qIndex, authKey)
+
+			t.Logf("authToken0 = %v\n", sk.Decrypt(state.AuthToken0))
+			t.Logf("authToken1 = %v\n", sk.Decrypt(state.AuthToken1))
+
+			// issue challenge
+			chalToken, err := AuthChalForQuery(secparam, keydb, authQuery, nprocs)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			t.Logf("chal0 = %v\n", sk.NestedDecrypt(chalToken.Token0))
+			t.Logf("chal1 = %v\n", sk.NestedDecrypt(chalToken.Token1))
+
+			// generate proof
+			proofToken, err := AuthProve(state, chalToken)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// generate proof
+			ok := AuthCheck(pk, authQuery, chalToken, proofToken)
+			if !ok {
+				t.Fatalf("ASPIR proof failed")
+			}
 		}
-
-		t.Logf("chal0 = %v\n", sk.NestedDecrypt(chalToken.Token0))
-		t.Logf("chal1 = %v\n", sk.NestedDecrypt(chalToken.Token1))
-
-		// generate proof
-		proofToken, err := AuthProve(state, chalToken)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// generate proof
-		ok := AuthCheck(pk, authQuery, chalToken, proofToken)
-		if !ok {
-			t.Fatalf("ASPIR proof failed")
-		}
-
 	}
 }
 
-// run with 'go test -v -run TestSharedASPIR' to see log outputs.
+// run with 'go test -v -run TestSharedASPIRCompleteness' to see log outputs.
 func TestSharedASPIRCompleteness(t *testing.T) {
 
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness
@@ -78,6 +84,7 @@ func TestSharedASPIRCompleteness(t *testing.T) {
 	}
 }
 
+// run with 'go test -v -run TestSharedASPIRSoundness' to see log outputs.
 func TestSharedASPIRSoundness(t *testing.T) {
 
 	secparam := StatisticalSecurityParam // statistical secuirity parameter for proof soundness

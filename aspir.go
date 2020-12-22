@@ -63,6 +63,10 @@ func AuthChalForQuery(
 	query.Query0.Col.GroupSize = 1
 	query.Query1.Col.GroupSize = 1
 
+	// key database only has one entry per group
+	query.Query1.Row.DBWidth /= groupSize
+	query.Query0.Row.DBWidth /= groupSize
+
 	// get the row for query0
 	rowQueryRes0, err := keyDB.PrivateEncryptedQuery(query.Query0.Row, nprocs)
 	if err != nil {
@@ -85,8 +89,12 @@ func AuthChalForQuery(
 		return nil, err
 	}
 
+	// reset to original values
+	// TODO: deal with this later
 	query.Query0.Col.GroupSize = groupSize
 	query.Query1.Col.GroupSize = groupSize
+	query.Query0.Row.DBWidth *= groupSize
+	query.Query1.Row.DBWidth *= groupSize
 
 	return &ChalToken{res0.Slots[0].Cts[0], res1.Slots[0].Cts[0], secparam}, nil
 }
