@@ -102,14 +102,14 @@ func (dbmd *DBMetadata) newQueryShares(key int, groupSize int, numShares uint, i
 
 // NewAuthenticatedIndexQueryShares generates PIR query shares for the index
 func (dbmd *DBMetadata) NewAuthenticatedIndexQueryShares(
-	index int, authKey *Slot, groupSize int, numShares uint) []*AuthenticatedSecretSharedQuery {
+	index int, authKey *Slot, groupSize int, numShares uint) []*AuthenticatedQueryShare {
 
 	queryShares := dbmd.NewIndexQueryShares(index, groupSize, numShares)
 	authTokenShares := NewAuthTokenSharesForKey(authKey, numShares)
 
-	authQueryShares := make([]*AuthenticatedSecretSharedQuery, numShares)
+	authQueryShares := make([]*AuthenticatedQueryShare, numShares)
 	for i := 0; i < int(numShares); i++ {
-		authQueryShares[i] = &AuthenticatedSecretSharedQuery{queryShares[i], authTokenShares[i]}
+		authQueryShares[i] = &AuthenticatedQueryShare{queryShares[i], authTokenShares[i]}
 	}
 
 	return authQueryShares

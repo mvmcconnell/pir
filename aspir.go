@@ -25,10 +25,10 @@ type AuthenticatedEncryptedQuery struct {
 	AuthTokenComm1 *ROCommitment
 }
 
-// AuthenticatedSecretSharedQuery contains a secret share of the auth token
+// AuthenticatedQueryShare contains a secret share of the auth token
 // it doesn't need an "equivocation" query like AuthenticatedEncryptedQuery does
 // because the verification happens between 2 or more servers
-type AuthenticatedSecretSharedQuery struct {
+type AuthenticatedQueryShare struct {
 	*QueryShare
 	AuthToken *AuthTokenShare
 }
@@ -245,7 +245,7 @@ func NewAuthTokenSharesForKey(authKey *Slot, numShares uint) []*AuthTokenShare {
 // GenerateAuditForSharedQuery generates an audit share that is sent to the other server(s)
 func GenerateAuditForSharedQuery(
 	keyDB *Database,
-	query *AuthenticatedSecretSharedQuery,
+	query *AuthenticatedQueryShare,
 	nprocs int) (*AuditTokenShare, error) {
 
 	res, err := keyDB.PrivateSecretSharedQuery(query.QueryShare, nprocs)
