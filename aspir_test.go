@@ -33,7 +33,7 @@ func TestASPIR(t *testing.T) {
 			t.Logf("authToken1 = %v\n", sk.Decrypt(state.AuthToken1))
 
 			// issue challenge
-			chalToken, err := AuthChalForQuery(secbytes, keydb, authQuery, nprocs)
+			chalToken, err := GenerateAuthChalForQuery(secbytes, keydb, authQuery, nprocs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,12 +68,11 @@ func TestSharedASPIRCompleteness(t *testing.T) {
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[index]
-		authTokenShares := AuthTokenSharesForKey(authKey, 2)
-		queryShares := keydb.NewIndexQueryShares(index, 1, 2)
+		queryShares := keydb.NewAuthenticatedIndexQueryShares(index, authKey, 1, 2)
 
 		audits := make([]*AuditTokenShare, 2)
-		audits[0], _ = GenerateAuditForSharedQuery(keydb, queryShares[0], authTokenShares[0], 1)
-		audits[1], _ = GenerateAuditForSharedQuery(keydb, queryShares[1], authTokenShares[1], 1)
+		audits[0], _ = GenerateAuditForSharedQuery(keydb, queryShares[0], 1)
+		audits[1], _ = GenerateAuditForSharedQuery(keydb, queryShares[1], 1)
 
 		// generate proof
 		ok := CheckAudit(audits...)
@@ -96,12 +95,11 @@ func TestSharedASPIRSoundness(t *testing.T) {
 
 		// generate auth token consisiting of double encryption of the key
 		authKey := keydb.Slots[0]
-		authTokenShares := AuthTokenSharesForKey(authKey, 2)
-		queryShares := keydb.NewIndexQueryShares(index, 1, 2)
+		queryShares := keydb.NewAuthenticatedIndexQueryShares(index, authKey, 1, 2)
 
 		audits := make([]*AuditTokenShare, 2)
-		audits[0], _ = GenerateAuditForSharedQuery(keydb, queryShares[0], authTokenShares[0], 1)
-		audits[1], _ = GenerateAuditForSharedQuery(keydb, queryShares[1], authTokenShares[1], 1)
+		audits[0], _ = GenerateAuditForSharedQuery(keydb, queryShares[0], 1)
+		audits[1], _ = GenerateAuditForSharedQuery(keydb, queryShares[1], 1)
 
 		// generate proof
 		ok := CheckAudit(audits...)
@@ -125,7 +123,7 @@ func BenchmarkChallenge(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := AuthChalForQuery(secbytes, keydb, authQuery, 1)
+		_, err := GenerateAuthChalForQuery(secbytes, keydb, authQuery, 1)
 
 		if err != nil {
 			panic(err)
@@ -144,7 +142,7 @@ func BenchmarkProve(b *testing.B) {
 	authQuery, state := keydb.DBMetadata.NewAuthenticatedQuery(sk, 1, 0, authKey)
 
 	// issue challenge
-	chalToken, _ := AuthChalForQuery(secbytes, keydb, authQuery, 1)
+	chalToken, _ := GenerateAuthChalForQuery(secbytes, keydb, authQuery, 1)
 
 	b.ResetTimer()
 

@@ -25,6 +25,14 @@ type AuthenticatedEncryptedQuery struct {
 	AuthTokenComm1 *ROCommitment
 }
 
+// AuthenticatedSecretSharedQuery contains a secret share of the auth token
+// it doesn't need an "equivocation" query like AuthenticatedEncryptedQuery does
+// because the verification happens between 2 or more servers
+type AuthenticatedSecretSharedQuery struct {
+	*QueryShare
+	AuthToken *AuthTokenShare
+}
+
 // AuthQueryPrivateState the client's private state
 type AuthQueryPrivateState struct {
 	Sk         *paillier.SecretKey
@@ -51,8 +59,8 @@ type ProofToken struct {
 	S         *gmp.Int
 }
 
-// AuthChalForQuery generates a challenge token for the provided PIR query
-func AuthChalForQuery(
+// GenerateAuthChalForQuery generates a challenge token for the provided PIR query
+func GenerateAuthChalForQuery(
 	secparam int,
 	keyDB *Database,
 	query *AuthenticatedEncryptedQuery,
@@ -215,14 +223,14 @@ type AuthTokenShare struct {
 	T *Slot
 }
 
-// AuthTokenSharesForKey generates auth token shares for a specific AuthKey (encoded as a slot)
-func AuthTokenSharesForKey(authKey *Slot, numShares int) []*AuthTokenShare {
+// NewAuthTokenSharesForKey generates auth token shares for a specific AuthKey (encoded as a slot)
+func NewAuthTokenSharesForKey(authKey *Slot, numShares uint) []*AuthTokenShare {
 
 	numBytes := len(authKey.Data)
 	shares := make([]*AuthTokenShare, numShares)
 	accumulator := NewEmptySlot(numBytes)
 
-	for i := 1; i < numShares; i++ {
+	for i := 1; i < int(numShares); i++ {
 		share := NewRandomSlot(numBytes)
 		XorSlots(accumulator, share)
 		shares[i] = &AuthTokenShare{share}
@@ -237,11 +245,10 @@ func AuthTokenSharesForKey(authKey *Slot, numShares int) []*AuthTokenShare {
 // GenerateAuditForSharedQuery generates an audit share that is sent to the other server(s)
 func GenerateAuditForSharedQuery(
 	keyDB *Database,
-	query *QueryShare,
-	authToken *AuthTokenShare,
+	query *AuthenticatedSecretSharedQuery,
 	nprocs int) (*AuditTokenShare, error) {
 
-	res, err := keyDB.PrivateSecretSharedQuery(query, nprocs)
+	res, err := keyDB.PrivateSecretSharedQuery(query.QueryShare, nprocs)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +258,7 @@ func GenerateAuditForSharedQuery(
 	}
 
 	keySlotShare := res.Shares[0]
-	XorSlots(keySlotShare, authToken.T)
+	XorSlots(keySlotShare, query.AuthToken.T)
 	return &AuditTokenShare{keySlotShare}, nil
 }
 

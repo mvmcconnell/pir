@@ -100,6 +100,21 @@ func (dbmd *DBMetadata) newQueryShares(key int, groupSize int, numShares uint, i
 	return shares
 }
 
+// NewAuthenticatedIndexQueryShares generates PIR query shares for the index
+func (dbmd *DBMetadata) NewAuthenticatedIndexQueryShares(
+	index int, authKey *Slot, groupSize int, numShares uint) []*AuthenticatedSecretSharedQuery {
+
+	queryShares := dbmd.NewIndexQueryShares(index, groupSize, numShares)
+	authTokenShares := NewAuthTokenSharesForKey(authKey, numShares)
+
+	authQueryShares := make([]*AuthenticatedSecretSharedQuery, numShares)
+	for i := 0; i < int(numShares); i++ {
+		authQueryShares[i] = &AuthenticatedSecretSharedQuery{queryShares[i], authTokenShares[i]}
+	}
+
+	return authQueryShares
+}
+
 // NewEncryptedQuery generates a new encrypted point function that acts as a PIR query
 // defaults to sqrt sized grid database layout
 func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, groupSize, index int) *EncryptedQuery {
@@ -110,60 +125,6 @@ func (dbmd *DBMetadata) NewEncryptedQuery(pk *paillier.PublicKey, groupSize, ind
 	width, height = dbmd.GetDimentionsForDatabase(height, groupSize)
 
 	return dbmd.NewEncryptedQueryWithDimentions(pk, width, height, groupSize, index)
-}
-
-// NewAuthenticatedQuery generates an authenticated PIR query that can be verified by the server
-func (dbmd *DBMetadata) NewAuthenticatedQuery(
-	sk *paillier.SecretKey,
-	groupSize, index int,
-	authKey *Slot) (*AuthenticatedEncryptedQuery, *AuthQueryPrivateState) {
-
-	pk := &sk.PublicKey
-
-	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, index)
-	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
-
-	// TODO: have a better way of converting authKey to an encryptable type
-	// since it *has* to match the format used when processing queries
-	realToken := pk.Encrypt(new(gmp.Int).SetBytes(authKey.Data))
-	fakeToken := pk.EncryptZero()
-
-	var query0 *DoublyEncryptedQuery
-	var query1 *DoublyEncryptedQuery
-	var token0 *paillier.Ciphertext
-	var token1 *paillier.Ciphertext
-
-	bit := rand.Intn(2)
-	if bit == 0 {
-		query0 = queryReal
-		token0 = realToken
-		query1 = queryFake
-		token1 = fakeToken
-	} else {
-		query0 = queryFake
-		token0 = fakeToken
-		query1 = queryReal
-		token1 = realToken
-	}
-
-	authTokenComm0 := Commit(token0.C)
-	authTokenComm1 := Commit(token1.C)
-
-	authQuery := &AuthenticatedEncryptedQuery{
-		Query0:         query0,
-		Query1:         query1,
-		AuthTokenComm0: authTokenComm0,
-		AuthTokenComm1: authTokenComm1,
-	}
-
-	state := &AuthQueryPrivateState{
-		Sk:         sk,
-		Bit:        bit,
-		AuthToken0: token0,
-		AuthToken1: token1,
-	}
-
-	return authQuery, state
 }
 
 // NewEncryptedQueryWithDimentions generates a new encrypted point function that acts as a PIR query
@@ -257,6 +218,60 @@ func (dbmd *DBMetadata) NewDoublyEncryptedQueryWithDimentions(pk *paillier.Publi
 		Row: rowQuery,
 		Col: colQuery,
 	}
+}
+
+// NewAuthenticatedQuery generates an authenticated PIR query that can be verified by the server
+func (dbmd *DBMetadata) NewAuthenticatedQuery(
+	sk *paillier.SecretKey,
+	groupSize, index int,
+	authKey *Slot) (*AuthenticatedEncryptedQuery, *AuthQueryPrivateState) {
+
+	pk := &sk.PublicKey
+
+	queryReal := dbmd.NewDoublyEncryptedQuery(pk, groupSize, index)
+	queryFake := dbmd.NewDoublyEncryptedQuery(pk, groupSize, -1)
+
+	// TODO: have a better way of converting authKey to an encryptable type
+	// since it *has* to match the format used when processing queries
+	realToken := pk.Encrypt(new(gmp.Int).SetBytes(authKey.Data))
+	fakeToken := pk.EncryptZero()
+
+	var query0 *DoublyEncryptedQuery
+	var query1 *DoublyEncryptedQuery
+	var token0 *paillier.Ciphertext
+	var token1 *paillier.Ciphertext
+
+	bit := rand.Intn(2)
+	if bit == 0 {
+		query0 = queryReal
+		token0 = realToken
+		query1 = queryFake
+		token1 = fakeToken
+	} else {
+		query0 = queryFake
+		token0 = fakeToken
+		query1 = queryReal
+		token1 = realToken
+	}
+
+	authTokenComm0 := Commit(token0.C)
+	authTokenComm1 := Commit(token1.C)
+
+	authQuery := &AuthenticatedEncryptedQuery{
+		Query0:         query0,
+		Query1:         query1,
+		AuthTokenComm0: authTokenComm0,
+		AuthTokenComm1: authTokenComm1,
+	}
+
+	state := &AuthQueryPrivateState{
+		Sk:         sk,
+		Bit:        bit,
+		AuthToken0: token0,
+		AuthToken1: token1,
+	}
+
+	return authQuery, state
 }
 
 // Recover combines shares of slots to recover the data
