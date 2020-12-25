@@ -248,7 +248,10 @@ func GenerateAuditForSharedQuery(
 	query *AuthenticatedQueryShare,
 	nprocs int) (*AuditTokenShare, error) {
 
+	oldGroupSize := query.GroupSize
+	query.GroupSize = 1 // key database has group size 1
 	res, err := keyDB.PrivateSecretSharedQuery(query.QueryShare, nprocs)
+	query.GroupSize = oldGroupSize
 	if err != nil {
 		return nil, err
 	}
