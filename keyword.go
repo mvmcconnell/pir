@@ -1,7 +1,9 @@
 package pir
 
 import (
+	"errors"
 	"math"
+	"sort"
 )
 
 // padding value to encode when formatting the database for PIR
@@ -35,6 +37,10 @@ func (sqst *PrivateSqrtST) BuildForData(data []string) error {
 	// check if the data size has an integer sqrt and make it so if not
 	if math.Sqrt(float64(len(data))) != math.Floor(math.Sqrt(float64(len(data)))) {
 		data = PadToPowerOf2(data)
+	}
+
+	if !sort.StringsAreSorted(data) {
+		return errors.New("data not sorted")
 	}
 
 	sqrtDim := int(math.Sqrt(float64(len(data))))
