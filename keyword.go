@@ -6,7 +6,7 @@ import (
 )
 
 // padding value to encode when formatting the database for PIR
-const padding = "x"
+const padding = string(0)
 
 // PrivateSqrtST is a search tree structure with sqrt nodes per layer.
 // Requires 1 PIR query to get the index
