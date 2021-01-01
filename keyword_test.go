@@ -1,6 +1,7 @@
 package pir
 
 import (
+	"argsort"
 	"math"
 	"math/rand"
 	"sort"
@@ -31,11 +32,15 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 
 		data = PadToSqrt(data)
 		sort.Strings(data)
+		argsort.ReverseStrings(data)
 
 		t.Logf("[Test]: data size %v\n", len(data))
 
 		sqst := NewPrivateSqrtST()
-		sqst.BuildForData(data)
+		err := sqst.BuildForData(data)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		var res []*Slot
 
@@ -53,7 +58,7 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 			boundry := ""
 			rowIndex := 0
 			for rowIndex, boundry = range sqst.FirstLayer {
-				if data[i] < boundry {
+				if data[i] > boundry {
 					break
 				}
 			}
@@ -82,7 +87,7 @@ func TestKeywordQuerySqrtST(t *testing.T) {
 			colIndex := 0
 			var slot *Slot
 			for colIndex, slot = range res {
-				if slot.Compare(query) >= 0 {
+				if slot.Compare(query) <= 0 {
 					break
 				}
 			}

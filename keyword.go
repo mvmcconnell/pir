@@ -43,7 +43,7 @@ func (sqst *PrivateSqrtST) BuildForData(data []string) error {
 		if i+1 >= len(data) {
 			break
 		}
-		if data[i] > data[i+1] {
+		if data[i] < data[i+1] {
 			return errors.New("data not sorted")
 		}
 	}
