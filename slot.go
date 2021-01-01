@@ -18,8 +18,14 @@ type Slot struct {
 // XorSlots compute xor a and b storing result in a
 func XorSlots(a, b *Slot) {
 
-	for j := 0; j < len(b.Data); j++ {
-		a.Data[j] ^= b.Data[j]
+	if len(a.Data) < len(b.Data) {
+		for j := 0; j < len(a.Data); j++ {
+			a.Data[j] ^= b.Data[j]
+		}
+	} else {
+		for j := 0; j < len(b.Data); j++ {
+			a.Data[j] ^= b.Data[j]
+		}
 	}
 }
 
