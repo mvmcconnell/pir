@@ -33,6 +33,11 @@ func NewPrivateSqrtST() *PrivateSqrtST {
 // with optimal width/height
 func (sqst *PrivateSqrtST) BuildForData(data []string) error {
 
+	// check if the data size has an integer sqrt and make it so if not
+	if math.Sqrt(float64(len(data))) != math.Floor(math.Sqrt(float64(len(data)))) {
+		return errors.New("length of data is not a perfect square")
+	}
+
 	// make sure data is sorted
 	for i := range data {
 		if i+1 >= len(data) {
@@ -41,11 +46,6 @@ func (sqst *PrivateSqrtST) BuildForData(data []string) error {
 		if data[i] > data[i+1] {
 			return errors.New("data not sorted")
 		}
-	}
-
-	// check if the data size has an integer sqrt and make it so if not
-	if math.Sqrt(float64(len(data))) != math.Floor(math.Sqrt(float64(len(data)))) {
-		data = PadToPowerOf2(data)
 	}
 
 	sqrtDim := int(math.Sqrt(float64(len(data))))
