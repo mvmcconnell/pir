@@ -250,8 +250,21 @@ func GenerateAuditForSharedQuery(
 
 	oldGroupSize := query.GroupSize
 	query.GroupSize = 1 // key database has group size 1
-	res, err := keyDB.PrivateSecretSharedQuery(query.QueryShare, nprocs)
+	bits := keyDB.ExpandSharedQuery(query.QueryShare, nprocs)
 	query.GroupSize = oldGroupSize
+
+	return GenerateAuditForSharedQueryWithExpandedBits(keyDB, query, bits, nprocs)
+}
+
+// GenerateAuditForSharedQueryWithExpandedBits generates an audit share that is sent to the other server(s)
+// using the expanded DPF bits provided to it
+func GenerateAuditForSharedQueryWithExpandedBits(
+	keyDB *Database,
+	query *AuthenticatedQueryShare,
+	bits []bool,
+	nprocs int) (*AuditTokenShare, error) {
+
+	res, err := keyDB.PrivateSecretSharedQueryWithExpandedBits(query.QueryShare, bits, nprocs)
 	if err != nil {
 		return nil, err
 	}
