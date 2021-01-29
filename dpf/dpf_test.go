@@ -106,6 +106,17 @@ func TestCorrectTwoServerKeyword(t *testing.T) {
 	}
 }
 
+func Benchmark2PartyServerInit(b *testing.B) {
+
+	fClient := ClientInitialize(32)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		ServerInitialize(fClient.PrfKeys, fClient.NumBits)
+	}
+}
+
 func Benchmark2Party32BitKeywordEval(b *testing.B) {
 
 	fClient := ClientInitialize(32)

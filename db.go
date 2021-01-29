@@ -67,16 +67,55 @@ func NewDatabase() *Database {
 // PrivateSecretSharedQuery uses the provided PIR query to retreive a slot row
 func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*SecretSharedQueryResult, error) {
 
+	bits := db.ExpandSharedQuery(query, nprocs)
+	return db.PrivateSecretSharedQueryWithExpandedBits(query, bits, nprocs)
+}
+
+// PrivateSecretSharedQueryWithExpandedBits returns the result without expanding the query DPF
+func (db *Database) PrivateSecretSharedQueryWithExpandedBits(query *QueryShare, bits []bool, nprocs int) (*SecretSharedQueryResult, error) {
+
 	// height of databse given query.GroupSize = dbWidth
 	dimWidth := query.GroupSize
 	dimHeight := int(math.Ceil(float64(db.DBSize / query.GroupSize)))
 
+	// mapping of results; one for each process
+	results := make([]*Slot, dimWidth)
+
+	// initialize the slots
+	for col := 0; col < dimWidth; col++ {
+		results[col] = &Slot{
+			Data: make([]byte, db.SlotBytes),
+		}
+	}
+
+	for row := 0; row < dimHeight; row++ {
+
+		if bits[row] {
+			for col := 0; col < dimWidth; col++ {
+				slotIndex := row*dimWidth + col
+				// xor if bit is set and within bounds
+				if slotIndex < len(db.Slots) {
+					XorSlots(results[col], db.Slots[slotIndex])
+				} else {
+					break
+				}
+			}
+		}
+	}
+
+	return &SecretSharedQueryResult{db.SlotBytes, results}, nil
+}
+
+// ExpandSharedQuery returns the expands the DPF and returns an array of bits
+func (db *Database) ExpandSharedQuery(query *QueryShare, nprocs int) []bool {
+
 	var wg sync.WaitGroup
+
+	dimHeight := int(math.Ceil(float64(db.DBSize / query.GroupSize)))
 
 	// num bits to represent the index
 	numBits := uint(math.Log2(float64(dimHeight)) + 1)
 
-	// otherwise assume keyword based (32 bit keys)
 	if query.IsKeywordBased {
 		numBits = uint(32)
 	}
@@ -131,32 +170,7 @@ func (db *Database) PrivateSecretSharedQuery(query *QueryShare, nprocs int) (*Se
 		}
 	}
 
-	// mapping of results; one for each process
-	results := make([]*Slot, dimWidth)
-
-	// initialize the slots
-	for col := 0; col < dimWidth; col++ {
-		results[col] = &Slot{
-			Data: make([]byte, db.SlotBytes),
-		}
-	}
-
-	for row := 0; row < dimHeight; row++ {
-
-		if bits[row] {
-			for col := 0; col < dimWidth; col++ {
-				slotIndex := row*dimWidth + col
-				// xor if bit is set and within bounds
-				if slotIndex < len(db.Slots) {
-					XorSlots(results[col], db.Slots[slotIndex])
-				} else {
-					break
-				}
-			}
-		}
-	}
-
-	return &SecretSharedQueryResult{db.SlotBytes, results}, nil
+	return bits
 }
 
 // PrivateEncryptedQuery uses the provided PIR query to retreive a slot row (encrypted)
